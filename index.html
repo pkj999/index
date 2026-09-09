@@ -243,6 +243,12 @@
   #wt-root .wt-section-caret { display: flex; color: var(--wt-text-muted); transition: transform .18s ease; }
   #wt-root button.wt-section-head.open .wt-section-caret { transform: rotate(180deg); }
   #wt-root .wt-section-count { font-size: 11px; font-weight: 700; color: var(--wt-text-muted); background: var(--wt-bg); border-radius: 6px; padding: 2px 8px; }
+  /* 목록 구분선이 아니라 독립된 카드처럼 보여야 하는 아코디언 헤더(예: 오늘 단백질) */
+  #wt-root button.wt-section-head.wt-card-head { background: var(--wt-card); border: 1.5px solid var(--wt-border-strong); border-radius: 12px; padding: 0.9rem 1.1rem; margin: 0 0 8px; }
+  #wt-root button.wt-section-head.wt-card-head .wt-section-line { display: none; }
+  #wt-root button.wt-section-head.wt-card-head .wt-section-title { color: var(--wt-text); font-size: 13px; }
+  #wt-root button.wt-section-head.wt-card-head:active { transform: scale(.98); filter: brightness(.93); }
+  html[data-theme="dark"] #wt-root button.wt-section-head.wt-card-head:active { filter: brightness(1.35); }
 
   #wt-root #unsaved-bar {
     position: fixed; left: 50%; transform: translateX(-50%) translateY(-8px);
@@ -491,6 +497,39 @@
       <span class="wt-section-caret" data-icon="chevron-down" data-size="16"></span>
     </button>
     <div id="history-list" style="display: none;"></div>
+
+    <button id="protein-head" class="wt-section-head wt-card-head" type="button" aria-expanded="false" aria-controls="protein-body">
+      <span class="wt-section-title">오늘 단백질</span>
+      <span id="protein-count" class="wt-section-count"></span>
+      <span class="wt-section-line"></span>
+      <span class="wt-section-caret" data-icon="chevron-down" data-size="16"></span>
+    </button>
+    <div id="protein-body" class="wt-card" style="display: none; margin-top: 8px;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px;">
+        <div>
+          <span id="protein-total-display" style="font-size: 20px; font-weight: 700; color: var(--wt-text);">0g</span>
+          <span id="protein-target-tail" style="font-size: 12px; color: var(--wt-text-muted);"></span>
+        </div>
+        <span id="protein-pct" style="font-size: 12px; font-weight: 700; color: var(--wt-accent);"></span>
+      </div>
+      <div style="height: 8px; border-radius: 4px; background: var(--wt-bg); overflow: hidden; margin-bottom: 12px;">
+        <div id="protein-bar" style="height: 100%; background: var(--wt-accent); width: 0%; transition: width .3s ease;"></div>
+      </div>
+      <div id="protein-log-list" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;"></div>
+      <p id="protein-log-empty" style="display: none; font-size: 12px; color: var(--wt-text-muted); margin: 0 0 10px;">아직 기록한 끼니가 없습니다.</p>
+      <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
+        <button class="wt-chip protein-quick" data-label="아침" type="button">아침</button>
+        <button class="wt-chip protein-quick" data-label="점심" type="button">점심</button>
+        <button class="wt-chip protein-quick" data-label="저녁" type="button">저녁</button>
+        <button class="wt-chip protein-quick" data-label="간식" type="button">간식</button>
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <input type="text" id="protein-label-input" class="wt-input" placeholder="끼니(선택)" maxlength="20" enterkeyhint="next" style="flex: 1; min-width: 0;" />
+        <input type="number" id="protein-grams-input" class="wt-input" placeholder="g" inputmode="numeric" enterkeyhint="done" min="0" max="300" style="width: 68px; text-align: center; flex-shrink: 0;" />
+        <button id="protein-add-btn" class="wt-btn-primary" style="padding: 11px 14px; flex-shrink: 0;">추가</button>
+      </div>
+      <p id="protein-add-err" style="display: none; font-size: 12px; color: var(--wt-danger); margin: 8px 0 0;"></p>
+    </div>
   </div>
 
   <!-- ===== 캘린더 ===== -->
@@ -519,6 +558,21 @@
       </div>
       <p class="wt-mini-label" style="margin-bottom: 8px;">부위 밸런스</p>
       <div id="wk-balance"></div>
+    </div>
+
+    <div class="wt-card" style="margin-bottom: 12px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+        <p style="font-size: 13px; font-weight: 700; margin: 0; color: var(--wt-text);">단백질 섭취 추이</p>
+        <p id="protein-stats-caption" style="font-size: 11px; color: var(--wt-text-muted); margin: 0;"></p>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 12px;">
+        <div class="wt-stat-card"><p class="wt-stat-label">주간 평균</p><p class="wt-stat-value" id="protein-week-avg">-</p></div>
+        <div class="wt-stat-card"><p class="wt-stat-label">월간 평균</p><p class="wt-stat-value" id="protein-month-avg">-</p></div>
+      </div>
+      <div style="position: relative; height: 170px;">
+        <canvas id="protein-canvas"></canvas>
+      </div>
+      <p id="protein-stats-empty" style="display: none; font-size: 12px; color: var(--wt-text-muted); text-align: center; margin: 0;">기록이 쌓이면 표시됩니다.</p>
     </div>
 
     <div class="wt-card" style="margin-bottom: 12px;">
@@ -577,6 +631,22 @@
         </div>
       </div>
       <p style="font-size: 11px; color: var(--wt-text-muted); margin: 9px 0 0; line-height: 1.5;">입력한 몸무게는 맨몸운동 볼륨 계산에 사용됩니다.</p>
+    </div>
+
+    <div class="wt-card" style="margin-bottom: 12px;">
+      <p style="font-size: 13px; font-weight: 700; margin: 0 0 8px; color: var(--wt-text);">단백질 목표</p>
+      <p class="wt-mini-label" style="margin-bottom: 6px;">목표 방향성</p>
+      <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+        <button id="protein-goal-cut" class="wt-seg-btn" data-goal="cut" style="flex: 1;">체중 감량</button>
+        <button id="protein-goal-maintain" class="wt-seg-btn" data-goal="maintain" style="flex: 1;">유지</button>
+        <button id="protein-goal-bulk" class="wt-seg-btn" data-goal="bulk" style="flex: 1;">증량</button>
+      </div>
+      <p class="wt-mini-label" style="margin-bottom: 6px;">일일 목표 단백질(g)</p>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <input type="number" id="protein-target-input" class="wt-input" inputmode="numeric" min="0" max="400" step="1" style="flex: 1; text-align: center; font-weight: 700; padding: 11px 4px;" placeholder="-" />
+        <button id="protein-target-auto-btn" class="wt-btn-ghost-sm" type="button" style="display: none; flex-shrink: 0;">자동으로</button>
+      </div>
+      <p id="protein-target-note" style="font-size: 11px; color: var(--wt-text-muted); margin: 9px 0 0; line-height: 1.5;"></p>
     </div>
 
     <div class="wt-card" style="margin-bottom: 12px;">
@@ -858,10 +928,16 @@
   function isCardio(cat) { return cat === '유산소'; }
 
   // ---------- [데이터] 입력 상한값 (오타 방지) ----------
-  var LIMITS = { weight: 500, reps: 100, minutes: 600, intensity: 20, distance: 200 };
+  var LIMITS = { weight: 500, reps: 100, minutes: 600, intensity: 20, distance: 200, proteinMeal: 300, proteinTarget: 400 };
 
   // ---------- [데이터] 특이사항 태그 ----------
   var TAGS = ['컨디션 좋음', '수면 부족', '어깨 통증', '허리 통증', '무릎 통증', '폼 무너짐', '보조 받음', '실패 세트'];
+
+  // ---------- [데이터] 단백질 목표 방향성별 g/kg 계수 ----------
+  // 체중(kg) × 계수 = 일일 목표 단백질(g). 운동하는 성인 기준 일반적으로 알려진 참고 범위이며,
+  // 정밀한 영양 처방이 아니므로 개인차·질환 여부에 따라 조정이 필요할 수 있습니다.
+  var PROTEIN_COEF = { cut: 2.0, maintain: 1.6, bulk: 1.8 };
+  var PROTEIN_GOAL_LABELS = { cut: '체중 감량', maintain: '유지', bulk: '증량' };
 
   // ---------- [공용] 종목 이름 정규화 (공백·대소문자 차이 흡수) ----------
   function normName(v) { return String(v || '').toLowerCase().replace(/\s+/g, ''); }
@@ -893,7 +969,8 @@
   var data = {
     days: [], customExercises: {}, hiddenExercises: {}, routines: [],
     restSeconds: 90, sound: true, vibrate: true, dark: false,
-    heightCm: 0, weightKg: 0, weeklyGoal: 0, historyOpen: false, bwExercises: {}, schema: SCHEMA
+    heightCm: 0, weightKg: 0, weeklyGoal: 0, historyOpen: false, bwExercises: {}, schema: SCHEMA,
+    protein: { targetG: 0, targetAuto: true, goalDirection: 'maintain', logs: {} }, proteinOpen: false
   };
   var staging = [];
   var selectedCategory = null;
@@ -966,6 +1043,14 @@
   function hasCardio(sets) { return (sets || []).some(function (s) { return s.cardio; }); }
 
   // ---------- [계산] 예상 1RM (Epley 공식) 및 개인 최고기록(PR) 판정 ----------
+  // PR/1RM은 여러 화면(빠른 입력·저장된 기록·통계)에 걸쳐 있는 기능이라
+  // "판정 기준"과 "표시 문구"만 이 섹션에 모아두고, 각 화면은 아래 함수를 호출만 한다.
+  // 화면별 실제 호출 위치(로직 변경 시 함께 확인):
+  //   - 세트 추가/수정 시 판정:        [입력] qe-add-set 클릭 핸들러 (judgeAndMarkPR 호출)
+  //   - 빠른 입력 세트 목록 배지:      [입력] renderQESetList() (prBadgeHtml 호출)
+  //   - 저장된 기록/캘린더 배지:       [조회] buildDayCard() (prBadgeHtml 호출)
+  //   - 종목별 그래프의 1RM 추이 값:  [통계] pointsFor()
+  //   - "예상 최고 1RM" 캡션:         [통계] renderProgress() (bestOneRMSoFar 호출)
   function estOneRM(s) {
     if (!s || s.cardio || s.warmup) return 0;
     var w = effWeight(s), r = Number(s.reps) || 0;
@@ -984,6 +1069,23 @@
     });
     (extraSets || []).forEach(function (s) { best = Math.max(best, estOneRM(s)); });
     return best;
+  }
+  // 세트(entry) 하나가 PR인지 판정하고, PR이면 entry.pr = true로 표시한다.
+  // baselineSets: 이번 세트를 제외한 비교 기준 세트 목록(수정 중이면 수정 대상 제외하고 전달)
+  function judgeAndMarkPR(name, entry, baselineSets) {
+    var prevBest = bestOneRMSoFar(name, baselineSets);
+    var newOneRM = estOneRM(entry);
+    var isPR = prevBest > 0 && newOneRM > prevBest;
+    if (isPR) entry.pr = true;
+    return { isPR: isPR, oneRM: newOneRM };
+  }
+  // PR 배지 HTML — 빠른 입력 목록과 저장된 기록 카드 양쪽에서 동일하게 사용
+  function prBadgeHtml(hasPR) {
+    return hasPR ? '<span class="wt-pr-badge" title="개인 최고기록">🏆PR</span>' : '';
+  }
+  // PR 달성 토스트 문구 — 표현을 바꾸고 싶으면 여기 한 곳만 수정하면 됨
+  function prToastMessage(name, oneRM) {
+    return '🏆 ' + name + ' 신기록! 예상 1RM ' + Math.round(oneRM) + 'kg';
   }
 
   // 세트 한 줄 표기
@@ -1074,6 +1176,60 @@
     $('body-weight').value = data.weightKg > 0 ? data.weightKg : '';
   }
 
+  // ---------- [단백질] 목표량 계산 및 오늘 섭취 기록 ----------
+  // 이 섹션이 단백질 기능의 계산 로직 전부를 담당한다. 화면(설정/기록/통계)은 아래 함수를
+  // 호출만 하고, 판정·계산 기준을 바꿀 땐 이 섹션만 고치면 된다.
+  //   - 목표량 자동계산 기준:   autoProteinTarget() (체중 × 방향성 계수, PROTEIN_COEF)
+  //   - 오늘 총 섭취량/기록 목록: proteinLogsFor(), proteinTotalFor()
+  //   - 새 끼니 기록 추가:      addProteinLog()
+  //   - 통계용 일별 총량/평균:  proteinDailyTotals(), proteinAverage()
+  function autoProteinTarget() {
+    if (!(data.weightKg > 0)) return 0;
+    var coef = PROTEIN_COEF[data.protein.goalDirection] || PROTEIN_COEF.maintain;
+    return Math.round(data.weightKg * coef);
+  }
+  // targetAuto가 켜져 있을 때만 목표량을 다시 계산해 덮어씀 (사용자가 직접 입력한 값은 보존)
+  function recalcProteinTargetIfAuto() {
+    if (!data.protein.targetAuto) return;
+    var t = autoProteinTarget();
+    if (t > 0) data.protein.targetG = t;
+  }
+  function proteinLogsFor(dateStr) { return data.protein.logs[dateStr] || []; }
+  function proteinTotalFor(dateStr) {
+    return proteinLogsFor(dateStr).reduce(function (sum, it) { return sum + it.grams; }, 0);
+  }
+  // 끼니 기록 추가. 성공하면 true, 입력값이 상한을 벗어나면 false를 반환한다.
+  function addProteinLog(dateStr, label, grams) {
+    var g = Math.round(grams);
+    if (!isFinite(g) || g <= 0 || g > LIMITS.proteinMeal) return false;
+    var l = (label || '').trim().slice(0, 20) || '끼니';
+    if (!data.protein.logs[dateStr]) data.protein.logs[dateStr] = [];
+    data.protein.logs[dateStr].push({ id: uid(), label: l, grams: g });
+    return true;
+  }
+  function deleteProteinLog(dateStr, id) {
+    if (!data.protein.logs[dateStr]) return;
+    data.protein.logs[dateStr] = data.protein.logs[dateStr].filter(function (it) { return it.id !== id; });
+    if (!data.protein.logs[dateStr].length) delete data.protein.logs[dateStr];
+  }
+  // 오늘부터 days일 전까지, 하루도 빠짐없이 총 섭취량을 담은 배열(날짜 오름차순). 기록 없는 날은 0.
+  function proteinDailyTotals(days) {
+    var out = [];
+    var base = new Date();
+    for (var i = days - 1; i >= 0; i--) {
+      var dt = new Date(base.getFullYear(), base.getMonth(), base.getDate() - i);
+      var key = fmtDate(dt);
+      out.push({ date: key, grams: proteinTotalFor(key) });
+    }
+    return out;
+  }
+  // 최근 days일 중 "기록이 있는 날"만의 평균 (기록 없는 날은 0g이 아니라 미기록으로 취급해 평균에서 제외)
+  function proteinAverage(days) {
+    var vals = proteinDailyTotals(days).map(function (p) { return p.grams; }).filter(function (g) { return g > 0; });
+    if (!vals.length) return 0;
+    return Math.round(vals.reduce(function (a, b) { return a + b; }, 0) / vals.length);
+  }
+
   // ---------- [저장] 데이터 불러오기·저장·임시저장 ----------
   async function loadData() {
     try {
@@ -1146,12 +1302,36 @@
     data.weightKg = Number(obj.weightKg) > 0 ? Number(obj.weightKg) : 0;
     data.weeklyGoal = Math.min(7, Math.max(0, Math.round(Number(obj.weeklyGoal) || 0)));
     data.historyOpen = !!obj.historyOpen;
+    data.proteinOpen = !!obj.proteinOpen;
     data.bwExercises = {};
     if (obj.bwExercises && typeof obj.bwExercises === 'object') {
       Object.keys(obj.bwExercises).forEach(function (k) {
         var v = Number(obj.bwExercises[k]);
         if (isFinite(v) && v > 0) data.bwExercises[k] = Math.min(150, Math.max(5, Math.round(v)));
       });
+    }
+    data.protein = { targetG: 0, targetAuto: true, goalDirection: 'maintain', logs: {} };
+    if (obj.protein && typeof obj.protein === 'object') {
+      var pg = Number(obj.protein.targetG);
+      data.protein.targetG = (isFinite(pg) && pg > 0 && pg <= LIMITS.proteinTarget) ? Math.round(pg) : 0;
+      data.protein.targetAuto = obj.protein.targetAuto !== false;
+      var dir = obj.protein.goalDirection;
+      data.protein.goalDirection = (dir === 'cut' || dir === 'bulk') ? dir : 'maintain';
+      if (obj.protein.logs && typeof obj.protein.logs === 'object') {
+        Object.keys(obj.protein.logs).forEach(function (dateKey) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+          var arr = obj.protein.logs[dateKey];
+          if (!Array.isArray(arr)) return;
+          var cleaned = arr.map(function (it) {
+            if (!it || typeof it !== 'object') return null;
+            var g = Number(it.grams);
+            if (!isFinite(g) || g <= 0 || g > LIMITS.proteinMeal) return null;
+            var label = (typeof it.label === 'string' && it.label.trim()) ? it.label.trim().slice(0, 20) : '끼니';
+            return { id: typeof it.id === 'string' ? it.id : uid(), label: label, grams: Math.round(g) };
+          }).filter(Boolean);
+          if (cleaned.length) data.protein.logs[dateKey] = cleaned;
+        });
+      }
     }
     data.schema = SCHEMA;
   }
@@ -1811,7 +1991,7 @@
       var label = document.createElement('div');
       label.style.cssText = 'flex:1; min-width:0; cursor:pointer;';
       label.innerHTML = '<span>' + (i + 1) + '. ' + setLabel(s) + tailInfo +
-        (s.pr ? '<span class="wt-pr-badge" title="개인 최고기록">🏆PR</span>' : '') +
+        prBadgeHtml(s.pr) +
         (s.planned ? '<span class="wt-plan-badge">예정</span>' : '') + rpeBadge(s) + tagMini(s) + '</span>' +
         (s.note ? '<span style="display:block;font-size:11px;font-weight:400;color:var(--wt-text-muted);margin-top:2px;">' + escapeHtml(s.note) + '</span>' : '');
       label.addEventListener('click', function () { beginEditSet(i); });
@@ -1954,14 +2134,12 @@
     if (tagsSelected.length) entry.tags = tagsSelected.slice();
     clearError();
 
-    // 개인 최고기록(PR) 판정: 이번 세트를 제외한 지금까지의 최고 1RM보다 높으면 PR
+    // 개인 최고기록(PR) 판정: 판정 기준은 [계산] judgeAndMarkPR()에 모아둠
     var baselineSets = editingSetIndex >= 0
       ? currentQE.sets.filter(function (_, idx) { return idx !== editingSetIndex; })
       : currentQE.sets;
-    var prevBest1RM = bestOneRMSoFar(currentQE.name, baselineSets);
-    var newOneRM = estOneRM(entry);
-    var isPR = prevBest1RM > 0 && newOneRM > prevBest1RM;
-    if (isPR) entry.pr = true;
+    var prResult = judgeAndMarkPR(currentQE.name, entry, baselineSets);
+    var isPR = prResult.isPR, newOneRM = prResult.oneRM;
 
     if (editingSetIndex >= 0) {
       currentQE.sets[editingSetIndex] = entry;
@@ -1972,7 +2150,7 @@
       setTags([]);
       renderStaging();
       saveDraft();
-      if (isPR) toast('🏆 ' + currentQE.name + ' 신기록! 예상 1RM ' + Math.round(newOneRM) + 'kg', 2600);
+      if (isPR) toast(prToastMessage(currentQE.name, newOneRM), 2600);
       return;
     }
 
@@ -1986,7 +2164,7 @@
     renderStaging();
     saveDraft();
     startRestTimer();
-    if (isPR) toast('🏆 ' + currentQE.name + ' 신기록! 예상 1RM ' + Math.round(newOneRM) + 'kg', 2600);
+    if (isPR) toast(prToastMessage(currentQE.name, newOneRM), 2600);
   });
 
   // ---------- [입력] 저장 전 기록 알림줄 ----------
@@ -2116,6 +2294,100 @@
     staging.forEach(function (s) { vol += setVolume(s.sets); });
     $('today-volume').textContent = fmtVol(vol);
   }
+
+  // ---------- [단백질] '오늘 단백질' 섹션 렌더 (entry-date 기준) ----------
+  function applyProteinOpen() {
+    var head = $('protein-head'), body = $('protein-body');
+    head.classList.toggle('open', !!data.proteinOpen);
+    head.setAttribute('aria-expanded', data.proteinOpen ? 'true' : 'false');
+    body.style.display = data.proteinOpen ? '' : 'none';
+  }
+  $('protein-head').addEventListener('click', function () {
+    data.proteinOpen = !data.proteinOpen;
+    applyProteinOpen();
+    persist();
+  });
+
+  function renderProteinToday() {
+    var dateStr = $('entry-date').value;
+    var logs = proteinLogsFor(dateStr);
+    var total = proteinTotalFor(dateStr);
+    var target = data.protein.targetG;
+
+    $('protein-count').textContent = target > 0 ? (total + ' / ' + target + 'g') : (total > 0 ? total + 'g' : '');
+    $('protein-total-display').textContent = total + 'g';
+    $('protein-target-tail').textContent = target > 0 ? (' / ' + target + 'g 목표') : ' (설정에서 목표량을 입력해 보세요)';
+    var pct = target > 0 ? Math.round((total / target) * 100) : 0;
+    $('protein-pct').textContent = target > 0 ? pct + '%' : '';
+    $('protein-bar').style.width = Math.min(100, pct) + '%';
+    $('protein-bar').style.background = pct >= 100 ? 'var(--wt-good)' : 'var(--wt-accent)';
+    applyProteinOpen();
+
+    var list = $('protein-log-list');
+    list.innerHTML = '';
+    $('protein-log-empty').style.display = logs.length ? 'none' : '';
+    logs.forEach(function (it) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;background:var(--wt-bg);border-radius:8px;padding:8px 10px;';
+      var label = document.createElement('span');
+      label.style.cssText = 'font-size:13px;color:var(--wt-text);';
+      label.innerHTML = escapeHtml(it.label) + ' · <b>' + it.grams + 'g</b>';
+      var del = document.createElement('button');
+      del.className = 'wt-icon-btn-sm';
+      del.setAttribute('aria-label', it.label + ' 단백질 기록 삭제');
+      del.innerHTML = svg('trash', 13);
+      del.addEventListener('click', function () {
+        deleteProteinLog(dateStr, it.id);
+        renderProteinToday();
+        persist();
+      });
+      row.appendChild(label); row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+  document.querySelectorAll('.protein-quick').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      $('protein-label-input').value = btn.getAttribute('data-label');
+      $('protein-grams-input').focus();
+    });
+  });
+  function submitProteinEntry() {
+    var err = $('protein-add-err');
+    var grams = parseFloat($('protein-grams-input').value);
+    if (!isFinite(grams) || grams <= 0 || grams > LIMITS.proteinMeal) {
+      err.textContent = '1~' + LIMITS.proteinMeal + 'g 사이의 값을 입력해 주세요.';
+      err.style.display = 'block';
+      return;
+    }
+    err.style.display = 'none';
+    addProteinLog($('entry-date').value, $('protein-label-input').value, grams);
+    $('protein-label-input').value = '';
+    $('protein-grams-input').value = '';
+    renderProteinToday();
+    persist();
+    // 추가 후 매번 손으로 키보드를 내려야 하는 불편을 줄이기 위해 자동으로 포커스를 해제함
+    if (window.document.activeElement && typeof window.document.activeElement.blur === 'function') {
+      window.document.activeElement.blur();
+    }
+  }
+  $('protein-add-btn').addEventListener('click', submitProteinEntry);
+  $('protein-grams-input').addEventListener('input', function () { $('protein-add-err').style.display = 'none'; });
+  $('protein-grams-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); submitProteinEntry(); }
+  });
+  $('protein-label-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); $('protein-grams-input').focus(); }
+  });
+  // 입력칸에 포커스가 가면(키보드가 올라오면) 화면 가운데 쪽으로 스크롤해 키보드에 가리지 않게 함.
+  // 키보드가 올라오는 애니메이션 시간을 감안해 살짝 지연 후 스크롤함.
+  ['protein-label-input', 'protein-grams-input'].forEach(function (id) {
+    $(id).addEventListener('focus', function () {
+      var el = this;
+      setTimeout(function () {
+        try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+      }, 250);
+    });
+  });
 
   // ---------- [루틴] 루틴 칩 표시 및 적용 ----------
   function renderRoutineChips() {
@@ -2579,7 +2851,7 @@
           ? '<span style="color:var(--wt-text-muted);">' + label0 + '<span class="wt-warm-badge">W</span></span>'
           : label0;
         if (count > 1) line += ' <span style="color:var(--wt-text-muted);font-weight:700;">(' + count + ')</span>';
-        if (anyPR) line += '<span class="wt-pr-badge" title="개인 최고기록">🏆PR</span>';
+        if (anyPR) line += prBadgeHtml(true);
         setLines.push(line);
         i = j;
       }
@@ -2939,6 +3211,30 @@
     drawLineChart('total-canvas', points, 'volume', fmtVol);
   }
 
+  // 최근 14일 중 기록이 있는 날짜만 뽑아 차트로 표시 (기존 [통계] 볼륨 추이와 동일한 방식)
+  function proteinChartPoints() {
+    return proteinDailyTotals(14).filter(function (p) { return p.grams > 0; });
+  }
+  function renderProteinStats() {
+    var week = proteinAverage(7), month = proteinAverage(30);
+    $('protein-week-avg').textContent = week > 0 ? week + 'g' : '-';
+    $('protein-month-avg').textContent = month > 0 ? month + 'g' : '-';
+
+    var points = proteinChartPoints();
+    var canvas = $('protein-canvas');
+    var empty = $('protein-stats-empty');
+    if (points.length < 2) {
+      canvas.parentElement.style.display = 'none';
+      empty.style.display = 'block';
+      $('protein-stats-caption').textContent = '';
+      return;
+    }
+    canvas.parentElement.style.display = '';
+    empty.style.display = 'none';
+    $('protein-stats-caption').textContent = data.protein.targetG > 0 ? '목표 ' + data.protein.targetG + 'g' : '최근 ' + points.length + '일';
+    drawLineChart('protein-canvas', points, 'grams', function (v) { return Math.round(v) + 'g'; });
+  }
+
   function allExerciseNames() {
     var set = {};
     data.days.forEach(function (day) { day.exercises.forEach(function (ex) { set[ex.name] = 1; }); });
@@ -3139,6 +3435,24 @@
     $('goal-display').textContent = data.weeklyGoal > 0 ? '주 ' + data.weeklyGoal + '일' : '사용 안 함';
     $('goal-hint').textContent = data.weeklyGoal > 0 ? '채운 주는 캘린더에 체크 표시' : '';
     renderBody();
+    renderProteinSettings();
+  }
+
+  function renderProteinSettings() {
+    ['cut', 'maintain', 'bulk'].forEach(function (g) {
+      $('protein-goal-' + g).classList.toggle('active', data.protein.goalDirection === g);
+    });
+    $('protein-target-input').value = data.protein.targetG > 0 ? data.protein.targetG : '';
+    $('protein-target-auto-btn').style.display = data.protein.targetAuto ? 'none' : '';
+    var note = $('protein-target-note');
+    if (!(data.weightKg > 0)) {
+      note.textContent = '몸무게를 입력하면 체중 기반으로 목표량이 자동 계산됩니다. (일반적으로 알려진 참고 범위이며 개인차가 있을 수 있습니다)';
+    } else if (data.protein.targetAuto) {
+      note.textContent = '체중 ' + data.weightKg + 'kg × ' + PROTEIN_COEF[data.protein.goalDirection] + 'g/kg (' +
+        PROTEIN_GOAL_LABELS[data.protein.goalDirection] + ' 기준) 으로 자동 계산됨';
+    } else {
+      note.textContent = '직접 설정한 값입니다. 입력칸을 비우면 자동 계산으로 되돌아갑니다.';
+    }
   }
 
   $('goal-minus').addEventListener('click', function () {
@@ -3167,6 +3481,44 @@
     data.weightKg = (isFinite(v) && v > 0 && v <= 400) ? v : 0;
     if (!data.weightKg) this.value = '';
     if (currentQE) applyBodyweightMode(isCardio(currentQE.category) ? null : currentQE.name);
+    recalcProteinTargetIfAuto();
+    renderProteinSettings();
+    renderProteinToday();
+    persist();
+  });
+
+  ['cut', 'maintain', 'bulk'].forEach(function (g) {
+    $('protein-goal-' + g).addEventListener('click', function () {
+      data.protein.goalDirection = g;
+      recalcProteinTargetIfAuto();
+      renderProteinSettings();
+      renderProteinToday();
+      persist();
+    });
+  });
+  $('protein-target-input').addEventListener('change', function () {
+    var raw = this.value;
+    if (!raw) {
+      data.protein.targetAuto = true;
+      recalcProteinTargetIfAuto();
+    } else {
+      var v = parseFloat(raw);
+      if (!isFinite(v) || v <= 0 || v > LIMITS.proteinTarget) {
+        this.value = data.protein.targetG > 0 ? data.protein.targetG : '';
+        return;
+      }
+      data.protein.targetG = Math.round(v);
+      data.protein.targetAuto = false;
+    }
+    renderProteinSettings();
+    renderProteinToday();
+    persist();
+  });
+  $('protein-target-auto-btn').addEventListener('click', function () {
+    data.protein.targetAuto = true;
+    recalcProteinTargetIfAuto();
+    renderProteinSettings();
+    renderProteinToday();
     persist();
   });
 
@@ -3415,6 +3767,7 @@
       renderWeeklySummary();
       requestAnimationFrame(function () {
         renderTotalVolumeChart();
+        renderProteinStats();
         renderProgress();
       });
     }
@@ -3459,6 +3812,7 @@
   $('progress-exercise').addEventListener('change', renderProgress);
   $('entry-date').addEventListener('change', function () {
     updateTodayVolume();
+    renderProteinToday();
     checkFutureDate();
     saveDraft();
     if (currentQE) openQuickEntry(currentQE.category, currentQE.name);
@@ -3467,6 +3821,7 @@
   window.addEventListener('resize', function () {
     if ($('view-progress').style.display !== 'none') {
       renderTotalVolumeChart();
+      renderProteinStats();
       if ($('progress-stats').style.display !== 'none') renderProgress();
     }
   });
@@ -3488,6 +3843,8 @@
     renderProgressSelect();
     renderWeeklySummary();
     renderTotalVolumeChart();
+    renderProteinToday();
+    renderProteinStats();
     renderCalendar();
     renderCalDetail();
     renderSettings();
