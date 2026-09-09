@@ -37,7 +37,7 @@
     --wt-accent-dark: #1D4ED8;
     --wt-accent-soft: #DBEAFE;
     --wt-text: #2A2A33;
-    --wt-text-muted: #9797A3;
+    --wt-text-muted: #5F6270;
     --wt-border: #EDEDF1;
     --wt-border-strong: #D7DCE5;
     --wt-good: #3B6D11;
@@ -55,7 +55,7 @@
     --wt-accent-dark: #2563EB;
     --wt-accent-soft: #1E3A5F;
     --wt-text: #ECECF1;
-    --wt-text-muted: #8C8C99;
+    --wt-text-muted: #A9AEBC;
     --wt-border: #32323C;
     --wt-border-strong: #40485A;
     --wt-good: #8FCB4A;
@@ -88,22 +88,26 @@
   #wt-root .wt-cat-btn span.wt-cat-label { font-size: 11px; color: var(--wt-text-muted); font-weight: 600; }
   #wt-root .wt-cat-btn.active span.wt-cat-label { color: var(--wt-text); }
 
-  #wt-root .wt-chip { display: inline-flex; align-items: center; gap: 5px; border: none; background: var(--wt-bg); border-radius: 10px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; color: var(--wt-text); }
+  #wt-root .wt-chip { display: inline-flex; align-items: center; gap: 5px; border: none; background: var(--wt-bg); border-radius: 10px; padding: 12px 16px; min-height: 44px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; color: var(--wt-text); }
   #wt-root .wt-chip.active { background: var(--wt-accent); color: #fff; }
   #wt-root .wt-chip.deletable { background: var(--wt-danger-bg); color: var(--wt-danger); }
 
   #wt-root .wt-seg-btn { border: none; background: var(--wt-bg); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--wt-text-muted); }
   #wt-root .wt-seg-btn.active { background: var(--wt-accent); color: #fff; }
 
-  #wt-root .wt-stepper-btn { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--wt-border-strong); background: var(--wt-bg); font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: var(--wt-text); }
+  #wt-root .wt-stepper-btn { position: relative; width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--wt-border-strong); background: var(--wt-bg); font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: var(--wt-text); }
+  #wt-root .wt-stepper-btn::before { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 
   #wt-root .wt-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: 10px; background: linear-gradient(135deg, var(--wt-accent), var(--wt-accent-dark)); color: #fff; font-weight: 700; padding: 12px 18px; cursor: pointer; font-size: 13px; }
   #wt-root .wt-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1.5px solid var(--wt-border-strong); background: var(--wt-bg); color: var(--wt-text); font-weight: 700; padding: 12px 18px; cursor: pointer; font-size: 13px; }
-  #wt-root .wt-btn-ghost-sm { display: inline-flex; align-items: center; gap: 5px; border: 1.5px solid var(--wt-border-strong); background: var(--wt-card); color: var(--wt-text-muted); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+  #wt-root .wt-btn-ghost-sm { display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1.5px solid var(--wt-border-strong); background: var(--wt-card); color: var(--wt-text-muted); font-size: 12px; font-weight: 600; padding: 8px 12px; min-height: 40px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
   #wt-root .wt-btn-ghost-sm.on { background: var(--wt-accent-soft); color: var(--wt-accent); border-color: var(--wt-accent-soft); }
-  #wt-root .wt-icon-btn-sm { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--wt-bg); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--wt-text-muted); flex-shrink: 0; }
+  #wt-root .wt-icon-btn-sm { position: relative; width: 32px; height: 32px; border-radius: 50%; border: none; background: var(--wt-bg); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--wt-text-muted); flex-shrink: 0; }
+  /* 보이는 크기는 유지하되 실제 탭 영역만 44px로 확장 */
+  #wt-root .wt-icon-btn-sm::before { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
   #wt-root .wt-icon-btn-sm.danger { background: var(--wt-danger-bg); color: var(--wt-danger); }
-  #wt-root .wt-icon-btn-round { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--wt-border-strong); background: var(--wt-bg); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--wt-text); flex-shrink: 0; }
+  #wt-root .wt-icon-btn-round { position: relative; width: 38px; height: 38px; border-radius: 50%; border: 1.5px solid var(--wt-border-strong); background: var(--wt-bg); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--wt-text); flex-shrink: 0; }
+  #wt-root .wt-icon-btn-round::before { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 
   #wt-root .wt-stat-label { font-size: 11px; color: var(--wt-text-muted); margin: 0 0 4px; font-weight: 600; }
   #wt-root .wt-stat-value { font-size: 20px; font-weight: 700; margin: 0; color: var(--wt-text); }
@@ -209,6 +213,7 @@
   #wt-root .wt-rm-ord { width: 26px; height: 26px; border-radius: 8px; border: none; background: var(--wt-card); color: var(--wt-text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: transform .08s ease, filter .12s ease; }
   #wt-root .wt-rm-ord:active { transform: scale(.88); filter: brightness(.9); }
   #wt-root .wt-rm-ord:disabled { opacity: .3; cursor: default; }
+  #wt-root #rest-timer-stop::before { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 
   /* ===== 저장 전 / 저장 완료 구분 ===== */
   #wt-root #staging-area { border: 2px dashed var(--wt-accent); background: var(--wt-accent-soft); border-radius: 12px; padding: 14px; }
@@ -240,7 +245,7 @@
   html[data-theme="dark"] #wt-root .wt-plan-badge { background: #2A2E36; color: #A7AFBC; }
 
   /* ===== [C] 특이사항 태그 ===== */
-  #wt-root .wt-tag-chip { border: 1.5px solid var(--wt-border-strong); background: var(--wt-card); color: var(--wt-text-muted); font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: 8px; cursor: pointer; transition: transform .08s ease, filter .12s ease; }
+  #wt-root .wt-tag-chip { border: 1.5px solid var(--wt-border-strong); background: var(--wt-card); color: var(--wt-text-muted); font-size: 12px; font-weight: 600; padding: 10px 12px; min-height: 40px; border-radius: 8px; cursor: pointer; transition: transform .08s ease, filter .12s ease; }
   #wt-root .wt-tag-chip:active { transform: scale(.94); }
   #wt-root .wt-tag-chip.on { background: var(--wt-accent-soft); color: var(--wt-accent-dark); border-color: var(--wt-accent-soft); }
   html[data-theme="dark"] #wt-root .wt-tag-chip.on { color: #93C5FD; }
@@ -261,8 +266,6 @@
   html[data-theme="dark"] #wt-root .wt-bw-note { color: #93C5FD; }
   #wt-root .wt-bw-note.warn { color: var(--wt-text-muted); background: var(--wt-bg); }
 
-  /* ===== [4] BMI ===== */
-  #wt-root .wt-bmi-box { margin-top: 11px; background: var(--wt-bg); border-radius: 8px; padding: 11px 13px; }
 </style>
 </head>
 <body>
@@ -275,7 +278,7 @@
       <div id="rest-timer-pill" style="display: none; align-items: center; gap: 8px; background: var(--wt-accent); color: #fff; border-radius: 10px; padding: 6px 8px 6px 14px; box-shadow: var(--wt-shadow-accent);">
         <span data-icon="clock" data-size="15"></span>
         <span id="rest-timer-value" style="font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums;">00:00</span>
-        <button id="rest-timer-stop" aria-label="타이머 중지" style="width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,255,255,0.25); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;"><span data-icon="x" data-size="13"></span></button>
+        <button id="rest-timer-stop" aria-label="타이머 중지" style="position: relative; width: 28px; height: 28px; border: none; border-radius: 50%; background: rgba(255,255,255,0.25); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;"><span data-icon="x" data-size="13"></span></button>
       </div>
       <button id="theme-toggle" class="wt-icon-btn-round" aria-label="다크 모드 전환"><span data-icon="moon" data-size="16"></span></button>
     </div>
@@ -299,6 +302,8 @@
         <span id="today-volume" style="font-size: 14px; font-weight: 700;">0kg</span>
       </div>
     </div>
+
+    <p id="future-note" style="display: none; font-size: 12px; font-weight: 600; color: var(--wt-accent-dark); background: var(--wt-accent-soft); border-radius: 8px; padding: 9px 12px; margin: 0 0 14px;">오늘보다 뒤의 날짜입니다. 날짜가 맞는지 확인해 주세요.</p>
 
     <div id="routine-row" style="margin-bottom: 16px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -358,6 +363,15 @@
           <button id="qe-close" aria-label="닫기" class="wt-icon-btn-sm"><span data-icon="x" data-size="14"></span></button>
         </div>
         <div id="qe-last" class="wt-last-empty"></div>
+        <div id="qe-bw-row" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+          <button id="qe-bw-toggle" class="wt-btn-ghost-sm" type="button">맨몸운동</button>
+          <div id="qe-bw-ratio" style="display: none; align-items: center; gap: 6px;">
+            <span style="font-size: 11px; font-weight: 600; color: var(--wt-text-muted);">체중 비율</span>
+            <button class="wt-stepper-btn" id="qe-bw-minus" type="button" aria-label="비율 감소">−</button>
+            <span id="qe-bw-pct" style="font-size: 13px; font-weight: 700; min-width: 46px; text-align: center; color: var(--wt-text);">100%</span>
+            <button class="wt-stepper-btn" id="qe-bw-plus" type="button" aria-label="비율 증가">+</button>
+          </div>
+        </div>
         <p id="qe-bw-note" class="wt-bw-note" style="display: none;"></p>
 
         <div id="qe-strength-fields" style="display: flex; align-items: center; gap: 14px; margin-bottom: 10px;">
@@ -365,7 +379,7 @@
             <p class="wt-mini-label" id="qe-weight-label">무게(kg)</p>
             <div style="display: flex; align-items: center; gap: 6px;">
               <button class="wt-stepper-btn" id="qe-weight-minus" aria-label="무게 감소">−</button>
-              <input type="number" id="qe-weight" step="0.5" min="0" inputmode="decimal" class="wt-input" style="flex: 1; min-width: 0; text-align: center; font-weight: 700; padding: 10px 4px;" />
+              <input type="number" id="qe-weight" step="0.5" min="0" max="500" inputmode="decimal" class="wt-input" style="flex: 1; min-width: 0; text-align: center; font-weight: 700; padding: 10px 4px;" />
               <button class="wt-stepper-btn" id="qe-weight-plus" aria-label="무게 증가">+</button>
             </div>
           </div>
@@ -373,7 +387,7 @@
             <p class="wt-mini-label">횟수</p>
             <div style="display: flex; align-items: center; gap: 6px;">
               <button class="wt-stepper-btn" id="qe-reps-minus" aria-label="횟수 감소">−</button>
-              <input type="number" id="qe-reps" step="1" min="0" inputmode="numeric" class="wt-input" style="flex: 1; min-width: 0; text-align: center; font-weight: 700; padding: 10px 4px;" />
+              <input type="number" id="qe-reps" step="1" min="1" max="100" inputmode="numeric" class="wt-input" style="flex: 1; min-width: 0; text-align: center; font-weight: 700; padding: 10px 4px;" />
               <button class="wt-stepper-btn" id="qe-reps-plus" aria-label="횟수 증가">+</button>
             </div>
           </div>
@@ -425,18 +439,22 @@
           <button id="qe-repeat-last" class="wt-btn-secondary" style="flex: 1; display: none;"><span data-icon="copy" data-size="14"></span>지난 세트 그대로</button>
         </div>
 
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <button id="qe-repeat-same" class="wt-btn-secondary" style="flex: 1; display: none;"><span data-icon="plus" data-size="14"></span><span id="qe-repeat-same-label">직전 세트 한 번 더</span></button>
+        </div>
+
         <div id="qe-set-list" style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;"></div>
         <p id="qe-hint" style="display: none; font-size: 11px; color: var(--wt-text-muted); margin: 8px 0 0;">세트를 탭하면 수정할 수 있습니다.</p>
       </div>
     </div>
 
     <div id="staging-area" style="display: none; margin-bottom: 1rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px;">
+        <div style="flex: 1; min-width: 0;">
           <p style="font-size: 13px; font-weight: 700; margin: 0; color: var(--wt-text);">오늘 추가할 기록<span class="wt-unsaved-tag">저장 전</span></p>
           <p id="draft-note" style="font-size: 11px; color: var(--wt-text-muted); margin: 2px 0 0;">임시 저장됨 — 앱을 닫아도 유지됩니다</p>
         </div>
-        <button id="save-routine-btn" class="wt-btn-ghost-sm"><span data-icon="bookmark" data-size="13"></span>루틴으로 저장</button>
+        <button id="save-routine-btn" class="wt-btn-ghost-sm" style="flex-shrink: 0;" aria-label="루틴으로 저장"><span data-icon="bookmark" data-size="13"></span>루틴</button>
       </div>
       <div id="routine-name-form" style="display: none; gap: 6px; margin-bottom: 10px;">
         <input type="text" id="routine-name-input" class="wt-input" placeholder="루틴 이름" style="flex: 1; min-width: 0;" />
@@ -538,14 +556,7 @@
           <input type="number" id="body-weight" step="0.1" min="0" max="400" inputmode="decimal" class="wt-input" style="width: 100%; text-align: center; font-weight: 700; padding: 11px 4px;" placeholder="-" />
         </div>
       </div>
-      <div id="bmi-box" class="wt-bmi-box" style="display: none;">
-        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px;">
-          <span style="font-size: 11px; font-weight: 700; color: var(--wt-text-muted);">BMI</span>
-          <span id="bmi-value" style="font-size: 22px; font-weight: 800; color: var(--wt-text); font-variant-numeric: tabular-nums;">-</span>
-        </div>
-        <p id="bmi-label" style="font-size: 12px; font-weight: 600; margin: 3px 0 0; color: var(--wt-text-muted); text-align: right;"></p>
-      </div>
-      <p style="font-size: 11px; color: var(--wt-text-muted); margin: 9px 0 0; line-height: 1.5;">BMI는 체중과 키만 사용하므로 근육량을 구분하지 못합니다. 근력 운동을 하는 경우 실제 체성분과 다르게 나올 수 있어 참고 지표로만 보세요. 입력한 몸무게는 이후 맨몸운동 볼륨 계산에도 사용됩니다.</p>
+      <p style="font-size: 11px; color: var(--wt-text-muted); margin: 9px 0 0; line-height: 1.5;">입력한 몸무게는 맨몸운동 볼륨 계산에 사용됩니다.</p>
     </div>
 
     <div class="wt-card" style="margin-bottom: 12px;">
@@ -776,42 +787,29 @@
   }
   function isCardio(cat) { return cat === '유산소'; }
 
+  // ---------- 입력 상한 (오타 방지) ----------
+  var LIMITS = { weight: 500, reps: 100, minutes: 600, intensity: 20, distance: 200 };
+
   // ---------- [C] 특이사항 태그 ----------
   var TAGS = ['컨디션 좋음', '수면 부족', '어깨 통증', '허리 통증', '무릎 통증', '폼 무너짐', '보조 받음', '실패 세트'];
 
   // ---------- [A] 이름 정규화 (공백·대소문자 차이 흡수) ----------
   function normName(v) { return String(v || '').toLowerCase().replace(/\s+/g, ''); }
 
-  // ---------- [3] 맨몸운동 체중 부하 ----------
-  // 비율은 문헌마다 편차가 큰 추정치임. 절대값이 아니라 추이 비교용으로만 사용할 것.
-  var BW_RATIOS = [
-    { kw: ['풀업', '친업', '턱걸이', 'pull up', 'pullup', 'chin'], ratio: 1.00 },
-    { kw: ['딥스', 'dip'], ratio: 0.95 },
-    { kw: ['머슬업'], ratio: 1.00 },
-    { kw: ['행잉레그레이즈', '행잉 레그', '레그레이즈'], ratio: 0.50 },
-    { kw: ['인버티드로우', '오스트레일리안'], ratio: 0.55 },
-    { kw: ['푸시업', '푸쉬업', '팔굽혀', 'push up', 'pushup'], ratio: 0.65 },
-    { kw: ['파이크푸시업', '파이크 푸시업'], ratio: 0.70 },
-    { kw: ['버피'], ratio: 0.65 },
-    { kw: ['런지'], ratio: 0.65 },
-    { kw: ['맨몸스쿼트', '공중스쿼트', '점프스쿼트'], ratio: 0.60 },
-    { kw: ['싯업', '윗몸'], ratio: 0.35 },
-    { kw: ['크런치'], ratio: 0.30 },
-    { kw: ['브이업', 'v업'], ratio: 0.40 },
-    { kw: ['마운틴클라이머'], ratio: 0.60 }
-  ];
-  function bwRatio(name) {
+  // ---------- [3] 맨몸운동 체중 부하 (종목별 수동 지정) ----------
+  // data.bwExercises = { '<종목명>': <체중 비율 %> }. 사용자가 직접 켠 종목에만 적용됨.
+  function bwPercent(name) {
     if (!name) return 0;
-    var n = String(name).toLowerCase().replace(/\s+/g, '');
-    var best = 0, bestLen = 0;
-    for (var i = 0; i < BW_RATIOS.length; i++) {
-      var e = BW_RATIOS[i];
-      for (var j = 0; j < e.kw.length; j++) {
-        var k = e.kw[j].toLowerCase().replace(/\s+/g, '');
-        if (n.indexOf(k) !== -1 && k.length > bestLen) { best = e.ratio; bestLen = k.length; }
-      }
-    }
-    return best;
+    var v = Number((data.bwExercises || {})[name]);
+    return (isFinite(v) && v > 0) ? Math.min(150, v) : 0;
+  }
+  function bwRatio(name) { return bwPercent(name) / 100; }
+  function setBwPercent(name, pct) {
+    if (!name) return;
+    data.bwExercises = data.bwExercises || {};
+    if (!pct) delete data.bwExercises[name];
+    else data.bwExercises[name] = Math.min(150, Math.max(5, Math.round(pct)));
+    persist();
   }
   // 기록 시점의 체중을 세트에 저장 — 이후 체중이 바뀌어도 과거 볼륨은 그대로 유지됨
   function bwLoadFor(name) {
@@ -825,7 +823,7 @@
   var data = {
     days: [], customExercises: {}, hiddenExercises: {}, routines: [],
     restSeconds: 90, sound: true, vibrate: true, dark: false,
-    heightCm: 0, weightKg: 0, weeklyGoal: 0, historyOpen: false, schema: SCHEMA
+    heightCm: 0, weightKg: 0, weeklyGoal: 0, historyOpen: false, bwExercises: {}, schema: SCHEMA
   };
   var staging = [];
   var selectedCategory = null;
@@ -978,29 +976,10 @@
     }).length;
   }
 
-  // ---------- [4] BMI ----------
-  // 대한비만학회(아시아-태평양) 기준. 참고 지표이며 체성분을 반영하지 않음.
-  function bmiLabel(v) {
-    if (v < 18.5) return '저체중 범위';
-    if (v < 23) return '정상 범위';
-    if (v < 25) return '과체중 범위';
-    return '비만 범위';
-  }
+  // ---------- 신체 정보 ----------
   function renderBody() {
     $('body-height').value = data.heightCm > 0 ? data.heightCm : '';
     $('body-weight').value = data.weightKg > 0 ? data.weightKg : '';
-    renderBmi();
-  }
-  function renderBmi() {
-    var box = $('bmi-box');
-    var h = Number(data.heightCm), w = Number(data.weightKg);
-    if (!(h > 0 && w > 0)) { box.style.display = 'none'; return; }
-    var m = h / 100;
-    var v = w / (m * m);
-    if (!isFinite(v) || v <= 0) { box.style.display = 'none'; return; }
-    box.style.display = '';
-    $('bmi-value').textContent = (Math.round(v * 10) / 10).toFixed(1);
-    $('bmi-label').textContent = bmiLabel(v);
   }
 
   // ---------- persistence ----------
@@ -1020,6 +999,17 @@
       } catch (e) {}
     }
   }
+  // 같은 날 같은 종목이 여러 항목으로 나뉜 경우 하나로 합침
+  function mergeDupExercises(list) {
+    var out = [], idx = {};
+    (list || []).forEach(function (ex) {
+      var key = (ex.category || '기타') + '\u0000' + ex.name;
+      if (idx[key] === undefined) { idx[key] = out.length; out.push(ex); }
+      else { out[idx[key]].sets = (out[idx[key]].sets || []).concat(ex.sets || []); }
+    });
+    return out;
+  }
+
   function applyLoaded(obj) {
     data.days = Array.isArray(obj.days) ? obj.days.map(function (d) {
       return {
@@ -1052,6 +1042,7 @@
         })
       };
     }) : [];
+    data.days.forEach(function (d) { d.exercises = mergeDupExercises(d.exercises); });
     data.customExercises = obj.customExercises || {};
     data.hiddenExercises = obj.hiddenExercises || {};
     data.routines = obj.routines || [];
@@ -1063,6 +1054,13 @@
     data.weightKg = Number(obj.weightKg) > 0 ? Number(obj.weightKg) : 0;
     data.weeklyGoal = Math.min(7, Math.max(0, Math.round(Number(obj.weeklyGoal) || 0)));
     data.historyOpen = !!obj.historyOpen;
+    data.bwExercises = {};
+    if (obj.bwExercises && typeof obj.bwExercises === 'object') {
+      Object.keys(obj.bwExercises).forEach(function (k) {
+        var v = Number(obj.bwExercises[k]);
+        if (isFinite(v) && v > 0) data.bwExercises[k] = Math.min(150, Math.max(5, Math.round(v)));
+      });
+    }
     data.schema = SCHEMA;
   }
   async function persist() {
@@ -1265,9 +1263,11 @@
               data.hiddenExercises[selectedCategory].push(name);
             }
           }
+          var removedFromRoutine = purgeExerciseFromRoutines(selectedCategory, name);
           persist();
           if (currentQE && currentQE.name === name) closeQuickEntry();
           renderExercisePicker();
+          if (removedFromRoutine) toast('루틴에서도 ' + removedFromRoutine + '곳 제거했습니다');
           return;
         }
         openQuickEntry(selectedCategory, name);
@@ -1304,6 +1304,21 @@
       });
     });
     return out;
+  }
+
+  // 종목 목록에서 지운 종목은 루틴에서도 함께 제거
+  function purgeExerciseFromRoutines(cat, name) {
+    var touched = 0;
+    data.routines.forEach(function (r) {
+      var before = (r.items || []).length;
+      r.items = (r.items || []).filter(function (it) { return !(it.name === name && it.category === cat); });
+      touched += before - r.items.length;
+    });
+    if (touched) {
+      data.routines = data.routines.filter(function (r) { return (r.items || []).length > 0; });
+      renderRoutineChips();
+    }
+    return touched;
   }
 
   function commitNewExercise(forced) {
@@ -1447,24 +1462,51 @@
   function applyBodyweightMode(name) {
     var note = $('qe-bw-note');
     var label = $('qe-weight-label');
-    var r = name ? bwRatio(name) : 0;
-    if (!r) {
-      note.style.display = 'none';
-      label.textContent = '무게(kg)';
-      return;
-    }
-    label.textContent = '추가 중량(kg)';
+    var row = $('qe-bw-row');
+    var toggle = $('qe-bw-toggle');
+    var ratioBox = $('qe-bw-ratio');
+
+    if (!name) { row.style.display = 'none'; note.style.display = 'none'; label.textContent = '무게(kg)'; return; }
+    row.style.display = 'flex';
+
+    var pct = bwPercent(name);
+    var on = pct > 0;
+    toggle.classList.toggle('on', on);
+    ratioBox.style.display = on ? 'flex' : 'none';
+    $('qe-bw-pct').textContent = (on ? pct : 100) + '%';
+    label.textContent = on ? '추가 중량(kg)' : '무게(kg)';
+
+    if (!on) { note.style.display = 'none'; return; }
     note.style.display = '';
     if (data.weightKg > 0) {
-      var load = bwLoadFor(name);
       note.className = 'wt-bw-note';
-      note.textContent = '맨몸운동 — 체중 ' + data.weightKg + 'kg의 ' + Math.round(r * 100) + '%인 ' +
-        load + 'kg이 볼륨에 반영됩니다. 무게추를 달았다면 추가분만 입력하세요. (비율은 추정치)';
+      note.textContent = '체중 ' + data.weightKg + 'kg의 ' + pct + '%인 ' + bwLoadFor(name) +
+        'kg이 볼륨에 반영됩니다. 무게추를 달았다면 추가분만 입력하세요.';
     } else {
       note.className = 'wt-bw-note warn';
-      note.textContent = '맨몸운동입니다. 설정 > 신체 정보에 몸무게를 입력하면 체중이 볼륨에 반영됩니다.';
+      note.textContent = '설정 > 신체 정보에 몸무게를 입력하면 체중이 볼륨에 반영됩니다.';
     }
   }
+
+  $('qe-bw-toggle').addEventListener('click', function () {
+    if (!currentQE || isCardio(currentQE.category)) return;
+    var name = currentQE.name;
+    var on = bwPercent(name) > 0;
+    setBwPercent(name, on ? 0 : 100);
+    if (!on) $('qe-weight').value = 0;
+    applyBodyweightMode(name);
+    toast(on ? '맨몸운동 해제' : '맨몸운동으로 지정');
+  });
+  function nudgeBw(delta) {
+    if (!currentQE) return;
+    var name = currentQE.name;
+    var cur = bwPercent(name);
+    if (!cur) return;
+    setBwPercent(name, cur + delta);
+    applyBodyweightMode(name);
+  }
+  $('qe-bw-minus').addEventListener('click', function () { nudgeBw(-5); });
+  $('qe-bw-plus').addEventListener('click', function () { nudgeBw(5); });
   function exitEditMode() {
     editingSetIndex = -1;
     $('qe-add-label').textContent = (currentQE && isCardio(currentQE.category)) ? '기록 추가' : '세트 추가';
@@ -1542,11 +1584,39 @@
     $('quick-entry').style.display = 'none';
   }
 
+  // 방금 넣은 세트를 그대로 한 번 더 — 같은 무게로 여러 세트 할 때의 입력 마찰을 줄임
+  function renderRepeatSame() {
+    var btn = $('qe-repeat-same');
+    if (!btn) return;
+    var sets = currentQE ? currentQE.sets : [];
+    var usable = editingSetIndex < 0 && sets.length > 0;
+    btn.style.display = usable ? '' : 'none';
+    if (!usable) return;
+    var last = sets[sets.length - 1];
+    $('qe-repeat-same-label').textContent = setLabel(last) + ' 한 번 더';
+  }
+  $('qe-repeat-same').addEventListener('click', function () {
+    if (!currentQE || !currentQE.sets.length || editingSetIndex >= 0) return;
+    unlockAudio();
+    var src = currentQE.sets[currentQE.sets.length - 1];
+    var copy = {};
+    Object.keys(src).forEach(function (k) { if (k !== 'planned') copy[k] = src[k]; });
+    if (Array.isArray(src.tags)) copy.tags = src.tags.slice();
+    currentQE.sets.push(copy);
+    commitStaging();
+    renderQESetList();
+    renderStaging();
+    saveDraft();
+    startRestTimer();
+  });
+
   function renderQESetList() {
     var wrap = $('qe-set-list');
     wrap.innerHTML = '';
     if (!currentQE) { $('qe-hint').style.display = 'none'; return; }
     $('qe-hint').style.display = currentQE.sets.length ? '' : 'none';
+
+    renderRepeatSame();
 
     currentQE.sets.forEach(function (s, i) {
       var row = document.createElement('div');
@@ -1622,25 +1692,26 @@
     var el = $('qe-weight'); el.value = Math.max(0, Math.round(((parseFloat(el.value) || 0) - 2.5) * 100) / 100);
   });
   $('qe-weight-plus').addEventListener('click', function () {
-    var el = $('qe-weight'); el.value = Math.round(((parseFloat(el.value) || 0) + 2.5) * 100) / 100;
+    var el = $('qe-weight');
+    el.value = Math.min(LIMITS.weight, Math.round(((parseFloat(el.value) || 0) + 2.5) * 100) / 100);
   });
   $('qe-reps-minus').addEventListener('click', function () {
     var el = $('qe-reps'); el.value = Math.max(0, (parseInt(el.value, 10) || 0) - 1);
   });
   $('qe-reps-plus').addEventListener('click', function () {
-    var el = $('qe-reps'); el.value = (parseInt(el.value, 10) || 0) + 1;
+    var el = $('qe-reps'); el.value = Math.min(LIMITS.reps, (parseInt(el.value, 10) || 0) + 1);
   });
   $('qe-min-minus').addEventListener('click', function () {
     var el = $('qe-minutes'); el.value = Math.max(0, (parseInt(el.value, 10) || 0) - 5);
   });
   $('qe-min-plus').addEventListener('click', function () {
-    var el = $('qe-minutes'); el.value = (parseInt(el.value, 10) || 0) + 5;
+    var el = $('qe-minutes'); el.value = Math.min(LIMITS.minutes, (parseInt(el.value, 10) || 0) + 5);
   });
   $('qe-int-minus').addEventListener('click', function () {
     var el = $('qe-intensity'); el.value = Math.max(0, (parseInt(el.value, 10) || 0) - 1);
   });
   $('qe-int-plus').addEventListener('click', function () {
-    var el = $('qe-intensity'); el.value = (parseInt(el.value, 10) || 0) + 1;
+    var el = $('qe-intensity'); el.value = Math.min(LIMITS.intensity, (parseInt(el.value, 10) || 0) + 1);
   });
 
   $('qe-add-set').addEventListener('click', function () {
@@ -1655,15 +1726,20 @@
       var distRaw = ($('qe-distance').value || '').trim();
       var dist = distRaw === '' ? null : parseFloat(distRaw);
       if (isNaN(mins) || mins <= 0) { showError('시간을 입력해 주세요.'); return; }
+      if (mins > LIMITS.minutes) { showError('시간은 ' + LIMITS.minutes + '분까지 입력할 수 있습니다.'); return; }
       if (isNaN(inten) || inten < 0) { showError('강도를 입력해 주세요.'); return; }
+      if (inten > LIMITS.intensity) { showError('강도는 ' + LIMITS.intensity + '까지 입력할 수 있습니다.'); return; }
       if (dist !== null && (isNaN(dist) || dist < 0)) { showError('거리를 올바르게 입력해 주세요.'); return; }
+      if (dist !== null && dist > LIMITS.distance) { showError('거리는 ' + LIMITS.distance + 'km까지 입력할 수 있습니다.'); return; }
       entry = { cardio: true, minutes: mins, intensity: inten, weight: 0, reps: 0, warmup: false };
       if (dist !== null && dist > 0) entry.distance = Math.round(dist * 100) / 100;
     } else {
       var w = parseFloat($('qe-weight').value);
       var r = parseInt($('qe-reps').value, 10);
       if (isNaN(w) || w < 0) { showError('무게를 입력해 주세요.'); return; }
+      if (w > LIMITS.weight) { showError('무게는 ' + LIMITS.weight + 'kg까지 입력할 수 있습니다. 숫자를 확인해 주세요.'); return; }
       if (isNaN(r) || r <= 0) { showError('횟수를 입력해 주세요.'); return; }
+      if (r > LIMITS.reps) { showError('횟수는 ' + LIMITS.reps + '회까지 입력할 수 있습니다. 숫자를 확인해 주세요.'); return; }
       entry = { weight: w, reps: r, warmup: warmupOn };
       var bwl = bwLoadFor(currentQE.name);
       if (bwl > 0) { entry.bw = true; entry.bwLoad = bwl; }
@@ -1731,6 +1807,14 @@
   window.addEventListener('scroll', updateUnsavedBar, { passive: true });
 
   // ---------- staging ----------
+  // 오늘보다 미래 날짜면 안내 표시 (차단하지는 않음 — 계획 입력을 막지 않기 위함)
+  function checkFutureDate() {
+    var el = $('future-note');
+    if (!el) return;
+    var v = $('entry-date').value;
+    el.style.display = (v && v > fmtDate(new Date())) ? '' : 'none';
+  }
+
   function renderStaging() {
     var area = $('staging-area'), list = $('staging-list');
     updateTodayVolume();
@@ -2147,6 +2231,7 @@
       });
       day.exercises.push({ name: item.name, category: item.category, sets: cleaned });
     });
+    day.exercises = mergeDupExercises(day.exercises);
 
     await persist();
     clearDraft();
@@ -2724,14 +2809,12 @@
     var v = parseFloat(this.value);
     data.heightCm = (isFinite(v) && v > 0 && v <= 260) ? v : 0;
     if (!data.heightCm) this.value = '';
-    renderBmi();
     persist();
   });
   $('body-weight').addEventListener('change', function () {
     var v = parseFloat(this.value);
     data.weightKg = (isFinite(v) && v > 0 && v <= 400) ? v : 0;
     if (!data.weightKg) this.value = '';
-    renderBmi();
     if (currentQE) applyBodyweightMode(isCardio(currentQE.category) ? null : currentQE.name);
     persist();
   });
@@ -2867,6 +2950,54 @@
     catch (e) { backupMsg('형식이 올바르지 않습니다.', false); return; }
     if (!incoming || !Array.isArray(incoming.days)) { backupMsg('운동 기록이 들어있지 않습니다.', false); return; }
 
+    // 형식 검증 — 깨진 날짜/수치가 저장소에 들어가지 않도록 걸러냄
+    var skipped = 0;
+    function validDate(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(new Date(v + 'T00:00:00').getTime()); }
+    function sanitizeSets(list) {
+      var out = [];
+      (list || []).forEach(function (st) {
+        if (!st || typeof st !== 'object') { skipped += 1; return; }
+        var o = { weight: Number(st.weight), reps: Number(st.reps), warmup: !!st.warmup };
+        if (st.cardio) {
+          o = { cardio: true, minutes: Number(st.minutes), intensity: Number(st.intensity), weight: 0, reps: 0, warmup: false };
+          if (!isFinite(o.minutes) || o.minutes < 0 || o.minutes > LIMITS.minutes) { skipped += 1; return; }
+          if (!isFinite(o.intensity) || o.intensity < 0 || o.intensity > LIMITS.intensity) o.intensity = 0;
+          var ds = Number(st.distance);
+          if (isFinite(ds) && ds > 0 && ds <= LIMITS.distance) o.distance = ds;
+        } else {
+          if (!isFinite(o.weight) || o.weight < 0 || o.weight > LIMITS.weight) { skipped += 1; return; }
+          if (!isFinite(o.reps) || o.reps <= 0 || o.reps > LIMITS.reps) { skipped += 1; return; }
+          var bl = Number(st.bwLoad);
+          if (isFinite(bl) && bl > 0) { o.bw = true; o.bwLoad = bl; }
+        }
+        if (typeof st.note === 'string' && st.note) o.note = st.note.slice(0, 200);
+        if (typeof st.rpe === 'string' && rpeOf(st.rpe)) o.rpe = st.rpe;
+        if (Array.isArray(st.tags) && st.tags.length) o.tags = st.tags.filter(function (t) { return typeof t === 'string'; }).slice(0, 8);
+        out.push(o);
+      });
+      return out;
+    }
+    function sanitizeExercises(list) {
+      var out = [];
+      (list || []).forEach(function (ex) {
+        if (!ex || typeof ex.name !== 'string' || !ex.name.trim()) { skipped += 1; return; }
+        var sets = sanitizeSets(ex.sets);
+        if (!sets.length) return;
+        out.push({
+          name: ex.name.trim().slice(0, 60),
+          category: CATEGORIES.indexOf(ex.category) !== -1 ? ex.category : '기타',
+          sets: sets
+        });
+      });
+      return out;
+    }
+
+    incoming.days = incoming.days.filter(function (dd) {
+      if (!dd || !validDate(dd.date)) { skipped += 1; return false; }
+      dd.exercises = sanitizeExercises(dd.exercises);
+      return dd.exercises.length > 0;
+    });
+
     var addedDays = 0, addedEx = 0;
     incoming.days.forEach(function (inDay) {
       if (!inDay || !inDay.date) return;
@@ -2897,9 +3028,12 @@
       }
     });
 
+    data.days.forEach(function (d) { d.exercises = mergeDupExercises(d.exercises); });
+
     await persist();
     renderAll();
-    backupMsg('복원 완료 — 새 날짜 ' + addedDays + '일, 운동 ' + addedEx + '건 추가.', true);
+    backupMsg('복원 완료 — 새 날짜 ' + addedDays + '일, 운동 ' + addedEx + '건 추가.' +
+      (skipped ? ' 형식이 맞지 않는 ' + skipped + '건은 건너뛰었습니다.' : ''), true);
   });
 
   // ---------- tabs ----------
@@ -2934,6 +3068,7 @@
   $('progress-exercise').addEventListener('change', renderProgress);
   $('entry-date').addEventListener('change', function () {
     updateTodayVolume();
+    checkFutureDate();
     saveDraft();
     if (currentQE) openQuickEntry(currentQE.category, currentQE.name);
   });
@@ -2986,6 +3121,7 @@
     syncTabbarSpace();
     $('entry-date').value = fmtDate(new Date());
     await loadDraft();
+    checkFutureDate();
     $('storage-mode').textContent = store.mode === 'claude' ? '저장 위치: 클로드 앱' : '저장 위치: 이 브라우저';
     renderRpeChips();
     renderAll();
