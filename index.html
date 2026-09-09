@@ -5,8 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="운동 기록">
 <meta name="theme-color" id="theme-color-meta" content="#F1F1F4">
 <meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <title>운동 기록</title>
 <style>
   * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
@@ -27,35 +33,37 @@
     padding: 1rem 1rem 0.5rem;
     --wt-bg: #F1F1F4;
     --wt-card: #FFFFFF;
-    --wt-accent: #FF7A55;
-    --wt-accent-dark: #E85F3C;
-    --wt-accent-soft: #FFE4D8;
+    --wt-accent: #2563EB;
+    --wt-accent-dark: #1D4ED8;
+    --wt-accent-soft: #DBEAFE;
     --wt-text: #2A2A33;
     --wt-text-muted: #9797A3;
     --wt-border: #EDEDF1;
+    --wt-border-strong: #D7DCE5;
     --wt-good: #3B6D11;
     --wt-danger: #C24141;
     --wt-danger-bg: #FDECEC;
     --wt-shadow-sm: 0 2px 6px rgba(30,30,40,0.06);
     --wt-shadow-md: 0 8px 20px rgba(30,30,40,0.08);
-    --wt-shadow-accent: 0 6px 14px rgba(255,122,85,0.32);
+    --wt-shadow-accent: 0 6px 14px rgba(37,99,235,0.26);
     background: var(--wt-bg);
   }
   html[data-theme="dark"] #wt-root {
     --wt-bg: #16161A;
     --wt-card: #23232B;
-    --wt-accent: #FF7A55;
-    --wt-accent-dark: #E85F3C;
-    --wt-accent-soft: #3E2620;
+    --wt-accent: #3B82F6;
+    --wt-accent-dark: #2563EB;
+    --wt-accent-soft: #1E3A5F;
     --wt-text: #ECECF1;
     --wt-text-muted: #8C8C99;
     --wt-border: #32323C;
+    --wt-border-strong: #40485A;
     --wt-good: #8FCB4A;
     --wt-danger: #FF8A8A;
     --wt-danger-bg: #3A2323;
     --wt-shadow-sm: 0 2px 6px rgba(0,0,0,0.35);
     --wt-shadow-md: 0 8px 20px rgba(0,0,0,0.4);
-    --wt-shadow-accent: 0 6px 14px rgba(255,122,85,0.28);
+    --wt-shadow-accent: 0 6px 14px rgba(59,130,246,0.3);
   }
 
   #wt-root input, #wt-root select, #wt-root textarea {
@@ -65,60 +73,60 @@
   #wt-root svg { display: block; flex-shrink: 0; }
   #wt-root .wt-label { font-size: 12px; color: var(--wt-text-muted); margin: 0 0 8px; font-weight: 600; }
   #wt-root .wt-mini-label { font-size: 11px; color: var(--wt-text-muted); margin: 0 0 6px; font-weight: 600; }
-  #wt-root .wt-card { background: var(--wt-card); border-radius: 18px; padding: 1.1rem 1.25rem; box-shadow: var(--wt-shadow-md); }
-  #wt-root .wt-input { border: none; background: var(--wt-bg); border-radius: 12px; padding: 11px 12px; }
+  #wt-root .wt-card { background: var(--wt-card); border-radius: 12px; padding: 1.1rem 1.25rem; border: 1.5px solid var(--wt-border-strong); }
+  #wt-root .wt-input { border: 1.5px solid var(--wt-border-strong); background: var(--wt-bg); border-radius: 8px; padding: 11px 12px; }
   #wt-root .wt-input:focus { outline: 2px solid var(--wt-accent); }
 
-  #wt-root .wt-volume-badge { display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--wt-accent); color: #fff; border-radius: 12px; padding: 4px 14px; box-shadow: var(--wt-shadow-accent); min-width: 84px; }
+  #wt-root .wt-volume-badge { display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--wt-accent); color: #fff; border-radius: 8px; padding: 4px 14px; min-width: 84px; }
 
-  #wt-root .wt-tabbar-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; border: none; background: transparent; cursor: pointer; color: var(--wt-text-muted); padding: 6px 16px; border-radius: 14px; }
+  #wt-root .wt-tabbar-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; border: none; background: transparent; cursor: pointer; color: var(--wt-text-muted); padding: 6px 16px; border-radius: 10px; }
   #wt-root .wt-tabbar-btn span:last-child { font-size: 10px; font-weight: 700; }
   #wt-root .wt-tabbar-btn.active { color: var(--wt-accent); background: var(--wt-accent-soft); }
 
   #wt-root .wt-cat-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; border: none; background: transparent; cursor: pointer; width: 58px; padding: 0; }
-  #wt-root .wt-cat-icon { width: 48px; height: 48px; border-radius: 50%; background: var(--wt-bg); display: flex; align-items: center; justify-content: center; box-shadow: var(--wt-shadow-sm); }
+  #wt-root .wt-cat-icon { width: 48px; height: 48px; border-radius: 50%; background: var(--wt-bg); display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--wt-border-strong); }
   #wt-root .wt-cat-btn span.wt-cat-label { font-size: 11px; color: var(--wt-text-muted); font-weight: 600; }
   #wt-root .wt-cat-btn.active span.wt-cat-label { color: var(--wt-text); }
 
-  #wt-root .wt-chip { display: inline-flex; align-items: center; gap: 5px; border: none; background: var(--wt-bg); border-radius: 999px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; color: var(--wt-text); }
-  #wt-root .wt-chip.active { background: var(--wt-accent); color: #fff; box-shadow: var(--wt-shadow-accent); }
+  #wt-root .wt-chip { display: inline-flex; align-items: center; gap: 5px; border: none; background: var(--wt-bg); border-radius: 10px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; color: var(--wt-text); }
+  #wt-root .wt-chip.active { background: var(--wt-accent); color: #fff; }
   #wt-root .wt-chip.deletable { background: var(--wt-danger-bg); color: var(--wt-danger); }
 
-  #wt-root .wt-seg-btn { border: none; background: var(--wt-bg); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--wt-text-muted); }
+  #wt-root .wt-seg-btn { border: none; background: var(--wt-bg); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--wt-text-muted); }
   #wt-root .wt-seg-btn.active { background: var(--wt-accent); color: #fff; }
 
-  #wt-root .wt-stepper-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--wt-bg); font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: var(--wt-text); box-shadow: var(--wt-shadow-sm); }
+  #wt-root .wt-stepper-btn { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--wt-border-strong); background: var(--wt-bg); font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: var(--wt-text); }
 
-  #wt-root .wt-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: 999px; background: linear-gradient(135deg, var(--wt-accent), var(--wt-accent-dark)); color: #fff; font-weight: 700; padding: 12px 18px; cursor: pointer; box-shadow: var(--wt-shadow-accent); font-size: 13px; }
-  #wt-root .wt-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: 999px; background: var(--wt-bg); color: var(--wt-text); font-weight: 700; padding: 12px 18px; cursor: pointer; font-size: 13px; }
-  #wt-root .wt-btn-ghost-sm { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--wt-border); background: var(--wt-card); color: var(--wt-text-muted); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+  #wt-root .wt-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: 10px; background: linear-gradient(135deg, var(--wt-accent), var(--wt-accent-dark)); color: #fff; font-weight: 700; padding: 12px 18px; cursor: pointer; font-size: 13px; }
+  #wt-root .wt-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1.5px solid var(--wt-border-strong); background: var(--wt-bg); color: var(--wt-text); font-weight: 700; padding: 12px 18px; cursor: pointer; font-size: 13px; }
+  #wt-root .wt-btn-ghost-sm { display: inline-flex; align-items: center; gap: 5px; border: 1.5px solid var(--wt-border-strong); background: var(--wt-card); color: var(--wt-text-muted); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
   #wt-root .wt-btn-ghost-sm.on { background: var(--wt-accent-soft); color: var(--wt-accent); border-color: var(--wt-accent-soft); }
   #wt-root .wt-icon-btn-sm { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--wt-bg); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--wt-text-muted); flex-shrink: 0; }
   #wt-root .wt-icon-btn-sm.danger { background: var(--wt-danger-bg); color: var(--wt-danger); }
-  #wt-root .wt-icon-btn-round { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--wt-bg); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--wt-text); flex-shrink: 0; box-shadow: var(--wt-shadow-sm); }
+  #wt-root .wt-icon-btn-round { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--wt-border-strong); background: var(--wt-bg); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--wt-text); flex-shrink: 0; }
 
   #wt-root .wt-stat-label { font-size: 11px; color: var(--wt-text-muted); margin: 0 0 4px; font-weight: 600; }
   #wt-root .wt-stat-value { font-size: 20px; font-weight: 700; margin: 0; color: var(--wt-text); }
-  #wt-root .wt-stat-card { background: var(--wt-card); border-radius: 16px; padding: 14px; box-shadow: var(--wt-shadow-md); }
+  #wt-root .wt-stat-card { background: var(--wt-card); border-radius: 12px; padding: 14px; border: 1.5px solid var(--wt-border-strong); }
 
-  #wt-root .wt-row-card { background: var(--wt-card); border-radius: 16px; padding: 10px 14px; box-shadow: var(--wt-shadow-sm); display: flex; align-items: center; gap: 12px; }
+  #wt-root .wt-row-card { background: var(--wt-card); border-radius: 12px; padding: 10px 14px; border: 1.5px solid var(--wt-border-strong); display: flex; align-items: center; gap: 12px; }
   #wt-root .wt-row-icon { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
-  #wt-root .wt-set-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; background: var(--wt-bg); border-radius: 10px; padding: 7px 8px 7px 10px; color: var(--wt-text); }
+  #wt-root .wt-set-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; background: var(--wt-bg); border-radius: 8px; padding: 7px 8px 7px 10px; color: var(--wt-text); }
   #wt-root .wt-set-row.editing { outline: 2px solid var(--wt-accent); }
   #wt-root .wt-rpe-badge { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 5px; padding: 1px 6px; margin-left: 5px; }
-  #wt-root .wt-rpe-chip { flex: 1; border: none; border-radius: 999px; padding: 9px 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--wt-bg); color: var(--wt-text-muted); }
+  #wt-root .wt-rpe-chip { flex: 1; border: none; border-radius: 8px; padding: 9px 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--wt-bg); color: var(--wt-text-muted); }
   #wt-root .wt-warm-badge { display: inline-block; font-size: 10px; font-weight: 700; color: #8A5A12; background: #FFE9C2; border-radius: 5px; padding: 1px 5px; margin-left: 5px; }
   html[data-theme="dark"] #wt-root .wt-warm-badge { color: #FFD48A; background: #43341A; }
 
-  #wt-root .wt-cal-cell { aspect-ratio: 1; border-radius: 10px; border: none; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; font-size: 12px; color: var(--wt-text); padding: 0; }
+  #wt-root .wt-cal-cell { aspect-ratio: 1; border-radius: 8px; border: none; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; font-size: 12px; color: var(--wt-text); padding: 0; }
   #wt-root .wt-cal-cell.empty { visibility: hidden; }
   #wt-root .wt-cal-cell.today { background: var(--wt-accent-soft); font-weight: 700; }
   #wt-root .wt-cal-cell.selected { outline: 2px solid var(--wt-accent); }
   #wt-root .wt-cal-dots { display: flex; gap: 2px; height: 5px; }
   #wt-root .wt-cal-dot { width: 5px; height: 5px; border-radius: 50%; }
 
-  #wt-root .wt-switch { position: relative; width: 42px; height: 24px; border-radius: 999px; background: var(--wt-bg); border: none; cursor: pointer; flex-shrink: 0; padding: 0; }
+  #wt-root .wt-switch { position: relative; width: 42px; height: 24px; border-radius: 8px; background: var(--wt-bg); border: 1.5px solid var(--wt-border-strong); cursor: pointer; flex-shrink: 0; padding: 0; }
   #wt-root .wt-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--wt-text-muted); transition: left .18s, background .18s; }
   #wt-root .wt-switch.on { background: var(--wt-accent-soft); }
   #wt-root .wt-switch.on::after { left: 21px; background: var(--wt-accent); }
@@ -129,6 +137,132 @@
   #wt-root input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   #wt-root input[type=date] { }
   html[data-theme="dark"] #wt-root input[type=date] { color-scheme: dark; }
+
+  /* ===== [2] 버튼 누름 반응 ===== */
+  #wt-root .wt-btn-primary, #wt-root .wt-btn-secondary, #wt-root .wt-btn-ghost-sm,
+  #wt-root .wt-icon-btn-sm, #wt-root .wt-icon-btn-round, #wt-root .wt-rpe-chip,
+  #wt-root .wt-stepper-btn, #wt-root .wt-seg-btn, #wt-root .wt-cal-cell,
+  #wt-root .wt-switch, #wt-root .wt-chip, #wt-root .wt-tabbar-btn, #wt-root .wt-row-card,
+  #wt-root .wt-cat-btn {
+    transition: transform .08s ease, filter .12s ease, box-shadow .12s ease;
+  }
+  #wt-root .wt-btn-primary:active { transform: scale(.955); filter: brightness(.9); box-shadow: none; }
+  #wt-root .wt-btn-secondary:active, #wt-root .wt-btn-ghost-sm:active,
+  #wt-root .wt-rpe-chip:active, #wt-root .wt-seg-btn:active,
+  #wt-root .wt-chip:active, #wt-root .wt-row-card:active { transform: scale(.96); filter: brightness(.93); }
+  #wt-root .wt-cat-btn:active { transform: scale(.92); }
+  #wt-root .wt-cat-btn:active .wt-cat-icon { filter: brightness(.9); }
+  #wt-root .wt-icon-btn-sm:active, #wt-root .wt-icon-btn-round:active,
+  #wt-root .wt-stepper-btn:active { transform: scale(.86); filter: brightness(.88); }
+  #wt-root .wt-cal-cell:active { transform: scale(.88); }
+  #wt-root .wt-switch:active { transform: scale(.93); }
+  #wt-root .wt-tabbar-btn:active { transform: scale(.9); }
+  html[data-theme="dark"] #wt-root .wt-btn-secondary:active,
+  html[data-theme="dark"] #wt-root .wt-btn-ghost-sm:active,
+  html[data-theme="dark"] #wt-root .wt-rpe-chip:active,
+  html[data-theme="dark"] #wt-root .wt-seg-btn:active,
+  html[data-theme="dark"] #wt-root .wt-icon-btn-sm:active,
+  html[data-theme="dark"] #wt-root .wt-stepper-btn:active { filter: brightness(1.35); }
+
+  /* 값이 바뀐 입력칸 순간 강조 */
+  @keyframes wt-flash { 0% { background: var(--wt-accent-soft); } 100% { background: var(--wt-bg); } }
+  #wt-root .wt-flash { animation: wt-flash .45s ease; }
+
+  /* 완료 안내 토스트 */
+  #wt-root #wt-toast {
+    position: fixed; left: 50%; bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%) translateY(10px);
+    background: var(--wt-text); color: var(--wt-card);
+    font-size: 13px; font-weight: 700; padding: 11px 18px; border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none; z-index: 9999; max-width: 82vw; text-align: center;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  #wt-root #wt-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ===== [5] 지난 기록 강조 카드 ===== */
+  #wt-root .wt-last-card { background: var(--wt-accent-soft); border-radius: 10px; padding: 11px 13px; margin: 0 0 12px; }
+  #wt-root .wt-last-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  #wt-root .wt-last-title { font-size: 11px; font-weight: 800; color: var(--wt-accent-dark); }
+  html[data-theme="dark"] #wt-root .wt-last-title { color: #93C5FD; }
+  #wt-root .wt-last-date { font-size: 11px; font-weight: 600; color: var(--wt-accent-dark); opacity: .7; }
+  html[data-theme="dark"] #wt-root .wt-last-date { color: #93C5FD; }
+  #wt-root .wt-last-sets { display: flex; flex-wrap: wrap; gap: 5px; }
+  #wt-root .wt-last-set { font-size: 13px; font-weight: 700; color: var(--wt-text); background: var(--wt-card); border-radius: 8px; padding: 5px 9px; font-variant-numeric: tabular-nums; }
+  #wt-root .wt-last-set.warm { opacity: .5; font-weight: 600; }
+  #wt-root .wt-last-sum { display: block; font-size: 11px; font-weight: 700; color: var(--wt-accent-dark); margin-top: 8px; }
+  html[data-theme="dark"] #wt-root .wt-last-sum { color: #93C5FD; }
+  #wt-root .wt-last-empty { font-size: 12px; color: var(--wt-text-muted); margin: 0 0 12px; }
+
+  /* ===== [A] 종목 검색 ===== */
+  #wt-root .wt-ex-search { position: relative; margin-bottom: 9px; }
+  #wt-root .wt-ex-search input { width: 100%; padding-left: 34px; }
+  #wt-root .wt-ex-search .wt-ex-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--wt-text-muted); display: flex; pointer-events: none; }
+  #wt-root .wt-ex-search .wt-ex-search-clear { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); }
+  #wt-root .wt-chip.wt-chip-new { border: 1px dashed var(--wt-accent); color: var(--wt-accent); background: transparent; }
+  #wt-root .wt-ex-none { font-size: 12px; color: var(--wt-text-muted); margin: 8px 0 0; }
+
+  /* ===== 루틴 관리 ===== */
+  #wt-root .wt-rm-row { display: flex; align-items: center; gap: 8px; background: var(--wt-bg); border-radius: 8px; padding: 7px 8px 7px 12px; font-size: 13px; font-weight: 600; color: var(--wt-text); }
+  #wt-root .wt-rm-row .wt-rm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #wt-root .wt-rm-cat { font-size: 10px; font-weight: 700; border-radius: 5px; padding: 1px 6px; margin-right: 6px; }
+  #wt-root .wt-rm-ord { width: 26px; height: 26px; border-radius: 8px; border: none; background: var(--wt-card); color: var(--wt-text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: transform .08s ease, filter .12s ease; }
+  #wt-root .wt-rm-ord:active { transform: scale(.88); filter: brightness(.9); }
+  #wt-root .wt-rm-ord:disabled { opacity: .3; cursor: default; }
+
+  /* ===== 저장 전 / 저장 완료 구분 ===== */
+  #wt-root #staging-area { border: 2px dashed var(--wt-accent); background: var(--wt-accent-soft); border-radius: 12px; padding: 14px; }
+  #wt-root .wt-unsaved-tag { display: inline-block; font-size: 10px; font-weight: 800; border-radius: 6px; padding: 2px 7px; background: var(--wt-accent); color: #fff; margin-left: 6px; vertical-align: 1px; }
+  #wt-root .wt-saved-tag { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 6px; padding: 2px 7px; background: var(--wt-bg); color: var(--wt-text-muted); margin-left: 6px; vertical-align: 1px; }
+  #wt-root .wt-section-head { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+  #wt-root .wt-section-head .wt-section-line { flex: 1; height: 1px; background: var(--wt-border); }
+  #wt-root .wt-section-head span.wt-section-title { font-size: 12px; font-weight: 700; color: var(--wt-text-muted); }
+  #wt-root button.wt-section-head { width: 100%; border: none; background: transparent; padding: 6px 0; cursor: pointer; text-align: left; transition: filter .12s ease; }
+  #wt-root button.wt-section-head:active { filter: brightness(.9); }
+  #wt-root .wt-section-caret { display: flex; color: var(--wt-text-muted); transition: transform .18s ease; }
+  #wt-root button.wt-section-head.open .wt-section-caret { transform: rotate(180deg); }
+  #wt-root .wt-section-count { font-size: 11px; font-weight: 700; color: var(--wt-text-muted); background: var(--wt-bg); border-radius: 6px; padding: 2px 8px; }
+
+  #wt-root #unsaved-bar {
+    position: fixed; left: 50%; transform: translateX(-50%) translateY(-8px);
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    width: min(452px, calc(100vw - 28px));
+    display: none; align-items: center; gap: 8px;
+    background: var(--wt-accent); color: #fff;
+    font-size: 12px; font-weight: 700; padding: 9px 14px; border-radius: 10px;
+    box-shadow: var(--wt-shadow-accent); cursor: pointer; z-index: 40;
+    opacity: 0; transition: opacity .18s ease, transform .18s ease;
+  }
+  #wt-root #unsaved-bar.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ===== 루틴 자동 입력 표시 ===== */
+  #wt-root .wt-plan-badge { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 5px; padding: 1px 6px; margin-left: 5px; background: #E7EBF1; color: #57606E; }
+  html[data-theme="dark"] #wt-root .wt-plan-badge { background: #2A2E36; color: #A7AFBC; }
+
+  /* ===== [C] 특이사항 태그 ===== */
+  #wt-root .wt-tag-chip { border: 1.5px solid var(--wt-border-strong); background: var(--wt-card); color: var(--wt-text-muted); font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: 8px; cursor: pointer; transition: transform .08s ease, filter .12s ease; }
+  #wt-root .wt-tag-chip:active { transform: scale(.94); }
+  #wt-root .wt-tag-chip.on { background: var(--wt-accent-soft); color: var(--wt-accent-dark); border-color: var(--wt-accent-soft); }
+  html[data-theme="dark"] #wt-root .wt-tag-chip.on { color: #93C5FD; }
+  #wt-root .wt-tag-mini { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 5px; padding: 1px 6px; margin-left: 4px; background: var(--wt-accent-soft); color: var(--wt-accent-dark); }
+  html[data-theme="dark"] #wt-root .wt-tag-mini { color: #93C5FD; }
+  #wt-root .wt-note-row { padding: 9px 0; font-size: 12px; color: var(--wt-text); }
+  #wt-root .wt-note-row + .wt-note-row { border-top: 1px solid var(--wt-border); }
+  #wt-root .wt-note-date { font-size: 11px; font-weight: 700; color: var(--wt-text-muted); }
+
+  /* ===== [1] 주간 목표 달성 표시 ===== */
+  #wt-root .wt-wk-flag { display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--wt-text-muted); }
+  #wt-root .wt-wk-flag.done { color: #fff; }
+  #wt-root .wt-wk-badge { width: 20px; height: 20px; border-radius: 50%; background: var(--wt-good); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+  #wt-root .wt-goal-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--wt-good); background: color-mix(in srgb, var(--wt-good) 14%, transparent); border-radius: 6px; padding: 2px 8px; margin-left: 6px; vertical-align: middle; }
+
+  /* ===== [3] 맨몸운동 안내 ===== */
+  #wt-root .wt-bw-note { font-size: 11px; font-weight: 600; line-height: 1.5; color: var(--wt-accent-dark); background: var(--wt-accent-soft); border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; }
+  html[data-theme="dark"] #wt-root .wt-bw-note { color: #93C5FD; }
+  #wt-root .wt-bw-note.warn { color: var(--wt-text-muted); background: var(--wt-bg); }
+
+  /* ===== [4] BMI ===== */
+  #wt-root .wt-bmi-box { margin-top: 11px; background: var(--wt-bg); border-radius: 8px; padding: 11px 13px; }
 </style>
 </head>
 <body>
@@ -138,13 +272,19 @@
   <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 1.1rem;">
     <h1 id="screen-title" style="font-size: 20px; font-weight: 700; margin: 0; color: var(--wt-text);">운동 기록</h1>
     <div style="display: flex; align-items: center; gap: 8px;">
-      <div id="rest-timer-pill" style="display: none; align-items: center; gap: 8px; background: var(--wt-accent); color: #fff; border-radius: 999px; padding: 6px 8px 6px 14px; box-shadow: var(--wt-shadow-accent);">
+      <div id="rest-timer-pill" style="display: none; align-items: center; gap: 8px; background: var(--wt-accent); color: #fff; border-radius: 10px; padding: 6px 8px 6px 14px; box-shadow: var(--wt-shadow-accent);">
         <span data-icon="clock" data-size="15"></span>
         <span id="rest-timer-value" style="font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums;">00:00</span>
         <button id="rest-timer-stop" aria-label="타이머 중지" style="width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,255,255,0.25); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;"><span data-icon="x" data-size="13"></span></button>
       </div>
       <button id="theme-toggle" class="wt-icon-btn-round" aria-label="다크 모드 전환"><span data-icon="moon" data-size="16"></span></button>
     </div>
+  </div>
+
+  <div id="unsaved-bar" role="button" tabindex="0">
+    <span data-icon="barbell" data-size="14"></span>
+    <span id="unsaved-bar-text" style="flex: 1;">저장하지 않은 기록이 있습니다</span>
+    <span style="opacity: .85;">보기</span>
   </div>
 
   <div id="loading" style="font-size: 13px; color: var(--wt-text-muted); padding: 2rem 0; text-align: center;">불러오는 중...</div>
@@ -160,9 +300,32 @@
       </div>
     </div>
 
-    <div id="routine-row" style="display: none; margin-bottom: 16px;">
-      <p class="wt-label">루틴 불러오기</p>
+    <div id="routine-row" style="margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <p class="wt-label" style="margin: 0;">루틴 불러오기</p>
+        <button id="routine-manage-btn" class="wt-btn-ghost-sm" type="button"><span data-icon="pencil" data-size="13"></span>관리</button>
+      </div>
       <div id="routine-chips" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+      <p id="routine-empty" style="display: none; font-size: 12px; color: var(--wt-text-muted); margin: 0;">저장된 루틴이 없습니다. 관리에서 만들거나, 오늘 기록을 루틴으로 저장하세요.</p>
+
+      <div id="routine-manager" class="wt-card" style="display: none; margin-top: 10px;">
+        <div id="rm-list"></div>
+        <div id="rm-editor" style="display: none;">
+          <p class="wt-mini-label">루틴 이름</p>
+          <input type="text" id="rm-name" class="wt-input" style="width: 100%;" placeholder="예: 가슴+삼두" />
+          <p class="wt-mini-label" style="margin-top: 12px;">종목 — 위에서부터 순서대로 불러옵니다</p>
+          <div id="rm-items" style="display: flex; flex-direction: column; gap: 6px;"></div>
+          <p id="rm-empty" style="font-size: 12px; color: var(--wt-text-muted); margin: 6px 0 0;">아래에서 부위를 골라 종목을 담으세요.</p>
+          <p class="wt-mini-label" style="margin-top: 12px;">종목 추가</p>
+          <div id="rm-cats" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;"></div>
+          <div id="rm-exs" style="display: none; gap: 6px; flex-wrap: wrap;"></div>
+          <p id="rm-msg" style="font-size: 12px; color: var(--wt-danger); margin: 8px 0 0; display: none;"></p>
+          <div style="display: flex; gap: 6px; margin-top: 12px;">
+            <button id="rm-save" class="wt-btn-primary" style="flex: 1;">저장</button>
+            <button id="rm-cancel" class="wt-btn-secondary" style="padding: 12px 16px;">취소</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="wt-card" style="margin-bottom: 14px;">
@@ -174,7 +337,13 @@
           <p class="wt-label" id="exercise-picker-label" style="margin: 0;">운동 선택</p>
           <button id="edit-exercises-btn" class="wt-btn-ghost-sm">종목 편집</button>
         </div>
+        <div class="wt-ex-search" id="ex-search-wrap">
+          <span class="wt-ex-search-icon" data-icon="search" data-size="15"></span>
+          <input type="text" id="ex-search" class="wt-input" placeholder="종목 검색 또는 새 종목 이름" autocomplete="off" />
+          <button id="ex-search-clear" class="wt-icon-btn-sm wt-ex-search-clear" style="display: none;" aria-label="검색어 지우기"><span data-icon="x" data-size="13"></span></button>
+        </div>
         <div id="exercise-chips" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+        <p id="ex-search-none" class="wt-ex-none" style="display: none;"></p>
         <p id="edit-hint" style="display: none; font-size: 11px; color: var(--wt-text-muted); margin: 8px 0 0;">삭제할 종목을 탭하면 목록에서 제거됩니다. 저장된 기록은 지워지지 않습니다.</p>
         <div id="add-exercise-form" style="display: none; gap: 6px; margin-top: 10px;">
           <input type="text" id="add-exercise-input" class="wt-input" placeholder="운동 이름" style="flex: 1; min-width: 0;" />
@@ -188,11 +357,12 @@
           <p style="font-size: 15px; font-weight: 700; margin: 0; color: var(--wt-text);" id="qe-name"></p>
           <button id="qe-close" aria-label="닫기" class="wt-icon-btn-sm"><span data-icon="x" data-size="14"></span></button>
         </div>
-        <p style="font-size: 12px; color: var(--wt-text-muted); margin: 0 0 12px;" id="qe-last"></p>
+        <div id="qe-last" class="wt-last-empty"></div>
+        <p id="qe-bw-note" class="wt-bw-note" style="display: none;"></p>
 
         <div id="qe-strength-fields" style="display: flex; align-items: center; gap: 14px; margin-bottom: 10px;">
           <div style="flex: 1; min-width: 0;">
-            <p class="wt-mini-label">무게(kg)</p>
+            <p class="wt-mini-label" id="qe-weight-label">무게(kg)</p>
             <div style="display: flex; align-items: center; gap: 6px;">
               <button class="wt-stepper-btn" id="qe-weight-minus" aria-label="무게 감소">−</button>
               <input type="number" id="qe-weight" step="0.5" min="0" inputmode="decimal" class="wt-input" style="flex: 1; min-width: 0; text-align: center; font-weight: 700; padding: 10px 4px;" />
@@ -244,6 +414,11 @@
           <input type="text" id="qe-note" class="wt-input" placeholder="세트 메모 (선택)" style="flex: 1; min-width: 0; font-size: 14px;" />
         </div>
 
+        <div style="margin-bottom: 10px;">
+          <button id="qe-tag-toggle" class="wt-btn-ghost-sm" type="button">특이사항</button>
+          <div id="qe-tag-chips" style="display: none; gap: 6px; flex-wrap: wrap; margin-top: 8px;"></div>
+        </div>
+
         <div style="display: flex; gap: 8px;">
           <button id="qe-add-set" class="wt-btn-primary" style="flex: 1;"><span data-icon="plus" data-size="15"></span><span id="qe-add-label">세트 추가</span></button>
           <button id="qe-cancel-edit" class="wt-btn-secondary" style="flex: 1; display: none;">수정 취소</button>
@@ -258,7 +433,7 @@
     <div id="staging-area" style="display: none; margin-bottom: 1rem;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
         <div>
-          <p style="font-size: 13px; font-weight: 700; margin: 0; color: var(--wt-text);">오늘 추가할 기록</p>
+          <p style="font-size: 13px; font-weight: 700; margin: 0; color: var(--wt-text);">오늘 추가할 기록<span class="wt-unsaved-tag">저장 전</span></p>
           <p id="draft-note" style="font-size: 11px; color: var(--wt-text-muted); margin: 2px 0 0;">임시 저장됨 — 앱을 닫아도 유지됩니다</p>
         </div>
         <button id="save-routine-btn" class="wt-btn-ghost-sm"><span data-icon="bookmark" data-size="13"></span>루틴으로 저장</button>
@@ -273,7 +448,13 @@
       <p id="form-error" style="font-size: 13px; color: var(--wt-danger); margin: 8px 0 0; display: none;"></p>
     </div>
 
-    <div id="history-list"></div>
+    <button id="history-head" class="wt-section-head" type="button" style="display: none;" aria-expanded="false" aria-controls="history-list">
+      <span class="wt-section-title">저장된 기록</span>
+      <span id="history-count" class="wt-section-count"></span>
+      <span class="wt-section-line"></span>
+      <span class="wt-section-caret" data-icon="chevron-down" data-size="16"></span>
+    </button>
+    <div id="history-list" style="display: none;"></div>
   </div>
 
   <!-- ===== 캘린더 ===== -->
@@ -284,7 +465,7 @@
         <p id="cal-title" style="font-size: 15px; font-weight: 700; margin: 0; color: var(--wt-text);"></p>
         <button id="cal-next" class="wt-icon-btn-round" aria-label="다음 달"><span data-icon="chevron-right" data-size="16"></span></button>
       </div>
-      <div id="cal-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;"></div>
+      <div id="cal-grid" style="display: grid; grid-template-columns: repeat(7, 1fr) 24px; gap: 4px;"></div>
       <div id="cal-legend" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--wt-border);"></div>
     </div>
     <div id="cal-detail"></div>
@@ -296,7 +477,7 @@
     <div class="wt-card" style="margin-bottom: 12px;">
       <p style="font-size: 13px; font-weight: 700; margin: 0 0 12px; color: var(--wt-text);">이번 주 요약</p>
       <div style="display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 14px;">
-        <div><p class="wt-stat-label">운동 일수</p><p class="wt-stat-value" id="wk-days">-</p></div>
+        <div><p class="wt-stat-label">운동 일수</p><p class="wt-stat-value" id="wk-days">-</p><p id="wk-goal" style="font-size:11px;font-weight:700;margin:2px 0 0;color:var(--wt-text-muted);display:none;"></p></div>
         <div><p class="wt-stat-label">총 볼륨</p><p class="wt-stat-value" id="wk-volume">-</p></div>
         <div><p class="wt-stat-label">총 세트</p><p class="wt-stat-value" id="wk-sets">-</p></div>
       </div>
@@ -335,10 +516,51 @@
         </div>
       </div>
       <div id="progress-table" class="wt-card" style="margin-top: 12px; padding: 0.5rem 1.25rem;"></div>
+      <div id="progress-notes" class="wt-card" style="margin-top: 12px; display: none;">
+        <p style="font-size: 13px; font-weight: 700; margin: 0 0 4px; color: var(--wt-text);">메모 · 특이사항</p>
+        <div id="progress-notes-list"></div>
+      </div>
     </div>
 
-    <div class="wt-card" style="margin-top: 12px;">
+  </div>
+
+  <!-- ===== 설정 ===== -->
+  <div id="view-settings" style="display: none;">
+    <div class="wt-card" style="margin-bottom: 12px;">
+      <p style="font-size: 13px; font-weight: 700; margin: 0 0 8px; color: var(--wt-text);">신체 정보</p>
+      <div style="display: flex; gap: 10px;">
+        <div style="flex: 1; min-width: 0;">
+          <p class="wt-mini-label">키(cm)</p>
+          <input type="number" id="body-height" step="0.1" min="0" max="260" inputmode="decimal" class="wt-input" style="width: 100%; text-align: center; font-weight: 700; padding: 11px 4px;" placeholder="-" />
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <p class="wt-mini-label">몸무게(kg)</p>
+          <input type="number" id="body-weight" step="0.1" min="0" max="400" inputmode="decimal" class="wt-input" style="width: 100%; text-align: center; font-weight: 700; padding: 11px 4px;" placeholder="-" />
+        </div>
+      </div>
+      <div id="bmi-box" class="wt-bmi-box" style="display: none;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--wt-text-muted);">BMI</span>
+          <span id="bmi-value" style="font-size: 22px; font-weight: 800; color: var(--wt-text); font-variant-numeric: tabular-nums;">-</span>
+        </div>
+        <p id="bmi-label" style="font-size: 12px; font-weight: 600; margin: 3px 0 0; color: var(--wt-text-muted); text-align: right;"></p>
+      </div>
+      <p style="font-size: 11px; color: var(--wt-text-muted); margin: 9px 0 0; line-height: 1.5;">BMI는 체중과 키만 사용하므로 근육량을 구분하지 못합니다. 근력 운동을 하는 경우 실제 체성분과 다르게 나올 수 있어 참고 지표로만 보세요. 입력한 몸무게는 이후 맨몸운동 볼륨 계산에도 사용됩니다.</p>
+    </div>
+
+    <div class="wt-card" style="margin-bottom: 12px;">
       <p style="font-size: 13px; font-weight: 700; margin: 0 0 4px; color: var(--wt-text);">설정</p>
+      <div class="wt-setting-row">
+        <div>
+          <span style="font-size: 13px; color: var(--wt-text);">주 운동 목표</span>
+          <span id="goal-hint" style="display: block; font-size: 11px; color: var(--wt-text-muted);"></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="wt-stepper-btn" id="goal-minus" aria-label="주 목표 감소">−</button>
+          <span id="goal-display" style="font-size: 14px; font-weight: 700; min-width: 52px; text-align: center; color: var(--wt-text);">사용 안 함</span>
+          <button class="wt-stepper-btn" id="goal-plus" aria-label="주 목표 증가">+</button>
+        </div>
+      </div>
       <div class="wt-setting-row">
         <span style="font-size: 13px; color: var(--wt-text);">휴식 시간</span>
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -365,13 +587,19 @@
       <button id="test-alert-btn" class="wt-btn-secondary" style="width: 100%; margin-top: 10px;">알림 테스트</button>
     </div>
 
-    <div class="wt-card" style="margin-top: 12px;">
+    <div class="wt-card" style="margin-bottom: 12px;">
       <p style="font-size: 13px; font-weight: 700; margin: 0 0 4px; color: var(--wt-text);">데이터 백업</p>
-      <p style="font-size: 11px; color: var(--wt-text-muted); margin: 0 0 8px; line-height: 1.5;">내보내기 한 내용을 메모장 등에 보관하세요. 문제가 생기면 가져오기로 되돌릴 수 있습니다.</p>
+      <p style="font-size: 11px; color: var(--wt-text-muted); margin: 0 0 8px; line-height: 1.5;">파일로 저장해 두면 브라우저 데이터가 지워져도 복원할 수 있습니다. 한 달에 한 번 정도 저장해 두세요.</p>
       <p id="storage-mode" style="font-size: 11px; color: var(--wt-text-muted); margin: 0 0 12px;"></p>
+      <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+        <button id="download-btn" class="wt-btn-primary" style="flex: 1;"><span data-icon="download" data-size="15"></span>파일로 저장</button>
+        <button id="file-import-btn" class="wt-btn-secondary" style="flex: 1;">파일에서 복원</button>
+      </div>
+      <input type="file" id="file-input" accept=".json,application/json,text/plain" style="display: none;" />
+      <p style="font-size: 11px; color: var(--wt-text-muted); margin: 0 0 8px;">파일 저장이 막힌 환경에서는 아래 텍스트 방식을 쓰세요.</p>
       <div style="display: flex; gap: 6px; margin-bottom: 10px;">
-        <button id="export-btn" class="wt-btn-secondary" style="flex: 1;">내보내기</button>
-        <button id="import-btn" class="wt-btn-secondary" style="flex: 1;">가져오기</button>
+        <button id="export-btn" class="wt-btn-secondary" style="flex: 1;">텍스트로 내보내기</button>
+        <button id="import-btn" class="wt-btn-secondary" style="flex: 1;">텍스트로 가져오기</button>
       </div>
       <textarea id="backup-box" class="wt-input" style="display: none; width: 100%; height: 110px; font-size: 11px; font-family: monospace; resize: vertical;" placeholder="백업 내용을 여기에 붙여넣으세요"></textarea>
       <div id="import-actions" style="display: none; gap: 6px; margin-top: 8px;">
@@ -386,11 +614,14 @@
     </div>
   </div>
 
+  <div id="wt-toast" role="status" aria-live="polite"></div>
+
   <div id="tabbar" style="display: none; position: sticky; bottom: 0; margin: 1.25rem -1rem 0; padding: 8px 1rem calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--wt-card); border-radius: 20px 20px 0 0; box-shadow: 0 -4px 16px rgba(30,30,40,0.10); z-index: 20;">
     <div style="display: flex; justify-content: space-around;">
       <button class="wt-tabbar-btn active" data-tab="log"><span data-icon="barbell" data-size="21"></span><span>기록</span></button>
       <button class="wt-tabbar-btn" data-tab="calendar"><span data-icon="calendar" data-size="21"></span><span>캘린더</span></button>
       <button class="wt-tabbar-btn" data-tab="progress"><span data-icon="chart" data-size="21"></span><span>통계</span></button>
+      <button class="wt-tabbar-btn" data-tab="settings"><span data-icon="gear" data-size="21"></span><span>설정</span></button>
     </div>
   </div>
 
@@ -454,14 +685,20 @@
     plus: '<path d="M12 5v14M5 12h14"/>',
     trash: '<path d="M4 7h16"/><path d="M9.5 4h5"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/>',
     check: '<path d="M5 13l4.5 4.5L19 7"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/>',
+    download: '<path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/>',
     copy: '<rect x="9" y="9" width="10.5" height="10.5" rx="2.5"/><path d="M4.5 15V7a2.5 2.5 0 012.5-2.5h8"/>',
     bookmark: '<path d="M7 4h10v16l-5-4-5 4z"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     calendar: '<rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3v5M15.5 3v5"/>',
     chart: '<path d="M3.5 20.5h17"/><path d="M6.5 20V11M12 20V4M17.5 20v-6"/>',
+    gear: '<circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5v.2a2 2 0 01-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 010-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3h.1a1.6 1.6 0 001-1.5V3a2 2 0 014 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8v.1a1.6 1.6 0 001.5 1H21a2 2 0 010 4h-.1a1.6 1.6 0 00-1.5 1z"/>',
     moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     'chevron-left': '<path d="M15 5l-7 7 7 7"/>',
+    'chevron-down': '<path d="M5 9l7 7 7-7"/>',
+    'chevron-up': '<path d="M19 15l-7-7-7 7"/>',
+    'pencil': '<path d="M4 20h4L19 9a2.1 2.1 0 10-3-3L5 17v3z"/>',
     'chevron-right': '<path d="M9 5l7 7-7 7"/>',
     'arrow-up': '<path d="M12 19V5M6 11l6-6 6 6"/>',
     'arrow-down': '<path d="M12 5v14M6 13l6 6 6-6"/>'
@@ -539,10 +776,56 @@
   }
   function isCardio(cat) { return cat === '유산소'; }
 
+  // ---------- [C] 특이사항 태그 ----------
+  var TAGS = ['컨디션 좋음', '수면 부족', '어깨 통증', '허리 통증', '무릎 통증', '폼 무너짐', '보조 받음', '실패 세트'];
+
+  // ---------- [A] 이름 정규화 (공백·대소문자 차이 흡수) ----------
+  function normName(v) { return String(v || '').toLowerCase().replace(/\s+/g, ''); }
+
+  // ---------- [3] 맨몸운동 체중 부하 ----------
+  // 비율은 문헌마다 편차가 큰 추정치임. 절대값이 아니라 추이 비교용으로만 사용할 것.
+  var BW_RATIOS = [
+    { kw: ['풀업', '친업', '턱걸이', 'pull up', 'pullup', 'chin'], ratio: 1.00 },
+    { kw: ['딥스', 'dip'], ratio: 0.95 },
+    { kw: ['머슬업'], ratio: 1.00 },
+    { kw: ['행잉레그레이즈', '행잉 레그', '레그레이즈'], ratio: 0.50 },
+    { kw: ['인버티드로우', '오스트레일리안'], ratio: 0.55 },
+    { kw: ['푸시업', '푸쉬업', '팔굽혀', 'push up', 'pushup'], ratio: 0.65 },
+    { kw: ['파이크푸시업', '파이크 푸시업'], ratio: 0.70 },
+    { kw: ['버피'], ratio: 0.65 },
+    { kw: ['런지'], ratio: 0.65 },
+    { kw: ['맨몸스쿼트', '공중스쿼트', '점프스쿼트'], ratio: 0.60 },
+    { kw: ['싯업', '윗몸'], ratio: 0.35 },
+    { kw: ['크런치'], ratio: 0.30 },
+    { kw: ['브이업', 'v업'], ratio: 0.40 },
+    { kw: ['마운틴클라이머'], ratio: 0.60 }
+  ];
+  function bwRatio(name) {
+    if (!name) return 0;
+    var n = String(name).toLowerCase().replace(/\s+/g, '');
+    var best = 0, bestLen = 0;
+    for (var i = 0; i < BW_RATIOS.length; i++) {
+      var e = BW_RATIOS[i];
+      for (var j = 0; j < e.kw.length; j++) {
+        var k = e.kw[j].toLowerCase().replace(/\s+/g, '');
+        if (n.indexOf(k) !== -1 && k.length > bestLen) { best = e.ratio; bestLen = k.length; }
+      }
+    }
+    return best;
+  }
+  // 기록 시점의 체중을 세트에 저장 — 이후 체중이 바뀌어도 과거 볼륨은 그대로 유지됨
+  function bwLoadFor(name) {
+    var r = bwRatio(name);
+    if (!r || !(data.weightKg > 0)) return 0;
+    return Math.round(data.weightKg * r * 10) / 10;
+  }
+  function effWeight(s) { return (Number(s.bwLoad) || 0) + (Number(s.weight) || 0); }
+
   // ---------- state ----------
   var data = {
     days: [], customExercises: {}, hiddenExercises: {}, routines: [],
-    restSeconds: 90, sound: true, vibrate: true, dark: false, schema: SCHEMA
+    restSeconds: 90, sound: true, vibrate: true, dark: false,
+    heightCm: 0, weightKg: 0, weeklyGoal: 0, historyOpen: false, schema: SCHEMA
   };
   var staging = [];
   var selectedCategory = null;
@@ -555,6 +838,12 @@
   var calCursor = new Date();
   var calSelected = null;
   var editMode = false;
+  var routineMgrOpen = false;
+  var routineEditing = null;
+  var rmCat = null;
+  var exSearch = '';
+  var tagsSelected = [];
+  var tagPanelOpen = false;
   var timerId = null, timerRemaining = 0;
   var audioCtx = null;
 
@@ -594,13 +883,13 @@
   function setVolume(sets) {
     return workSets(sets).reduce(function (sum, s) {
       if (s.cardio) return sum;
-      return sum + s.weight * s.reps;
+      return sum + effWeight(s) * s.reps;
     }, 0);
   }
   function maxWeight(sets) {
     var w = workSets(sets).filter(function (s) { return !s.cardio; });
     if (!w.length) return 0;
-    return Math.max.apply(null, w.map(function (s) { return s.weight; }));
+    return Math.max.apply(null, w.map(function (s) { return effWeight(s); }));
   }
   function totalMinutes(sets) {
     return (sets || []).reduce(function (sum, s) { return sum + (s.cardio ? (s.minutes || 0) : 0); }, 0);
@@ -615,6 +904,9 @@
       if (s.distance) parts.push(s.distance + 'km');
       return parts.join(' · ');
     }
+    if (s.bwLoad) {
+      return '체중' + (s.weight > 0 ? '+' + s.weight : '') + 'kg × ' + s.reps;
+    }
     return s.weight + 'kg × ' + s.reps;
   }
   function rpeBadge(s) {
@@ -625,6 +917,90 @@
   function cssVar(name, fallback) {
     var v = getComputedStyle($('wt-root')).getPropertyValue(name);
     return (v && v.trim()) ? v.trim() : fallback;
+  }
+
+  // ---------- [2] 완료 안내 토스트 ----------
+  var wtToastTimer = null;
+  function toast(msg) {
+    var el = $('wt-toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('show');
+    if (wtToastTimer) clearTimeout(wtToastTimer);
+    wtToastTimer = setTimeout(function () { el.classList.remove('show'); }, 1700);
+  }
+  function flash(el) {
+    if (!el) return;
+    el.classList.remove('wt-flash');
+    void el.offsetWidth;
+    el.classList.add('wt-flash');
+  }
+
+  // ---------- [5] 지난 기록 카드 ----------
+  function renderLastRecord(last) {
+    var box = $('qe-last');
+    if (!box) return;
+    if (!last) {
+      box.className = 'wt-last-empty';
+      box.textContent = '이전 기록이 없습니다. 첫 기록을 남겨보세요.';
+      return;
+    }
+    box.className = 'wt-last-card';
+    var chips = last.sets.map(function (s) {
+      return '<span class="wt-last-set' + (s.warmup ? ' warm' : '') + '">' +
+        escapeHtml(setLabel(s)) + (s.warmup ? ' W' : '') + '</span>';
+    }).join('');
+    var work = workSets(last.sets);
+    var sum = '';
+    if (work.length) {
+      if (work[0].cardio) {
+        sum = '총 ' + totalMinutes(last.sets) + '분 · ' + work.length + '회';
+      } else {
+        sum = '최고 ' + maxWeight(last.sets) + 'kg · 볼륨 ' + fmtVol(setVolume(last.sets)) + ' · ' + work.length + '세트';
+      }
+    }
+    box.innerHTML =
+      '<div class="wt-last-head"><span class="wt-last-title">지난 기록</span>' +
+      '<span class="wt-last-date">' + escapeHtml(fmtDisplayDate(last.date)) + '</span></div>' +
+      '<div class="wt-last-sets">' + chips + '</div>' +
+      (sum ? '<span class="wt-last-sum">' + escapeHtml(sum) + '</span>' : '');
+  }
+
+  // ---------- [1] 주간 목표 ----------
+  // 주 시작은 월요일 — '이번 주 요약'과 캘린더 주차를 같은 기준으로 맞춤
+  function weekStart(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+  }
+  function workoutDaysIn(startIso, endIso) {
+    return data.days.filter(function (d) {
+      return d.date >= startIso && d.date <= endIso &&
+        (d.exercises || []).some(function (ex) { return (ex.sets || []).length > 0; });
+    }).length;
+  }
+
+  // ---------- [4] BMI ----------
+  // 대한비만학회(아시아-태평양) 기준. 참고 지표이며 체성분을 반영하지 않음.
+  function bmiLabel(v) {
+    if (v < 18.5) return '저체중 범위';
+    if (v < 23) return '정상 범위';
+    if (v < 25) return '과체중 범위';
+    return '비만 범위';
+  }
+  function renderBody() {
+    $('body-height').value = data.heightCm > 0 ? data.heightCm : '';
+    $('body-weight').value = data.weightKg > 0 ? data.weightKg : '';
+    renderBmi();
+  }
+  function renderBmi() {
+    var box = $('bmi-box');
+    var h = Number(data.heightCm), w = Number(data.weightKg);
+    if (!(h > 0 && w > 0)) { box.style.display = 'none'; return; }
+    var m = h / 100;
+    var v = w / (m * m);
+    if (!isFinite(v) || v <= 0) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    $('bmi-value').textContent = (Math.round(v * 10) / 10).toFixed(1);
+    $('bmi-label').textContent = bmiLabel(v);
   }
 
   // ---------- persistence ----------
@@ -660,6 +1036,10 @@
               };
               if (s.note) out.note = s.note;
               if (s.rpe) out.rpe = s.rpe;
+              if (s.bwLoad) { out.bw = true; out.bwLoad = Number(s.bwLoad) || 0; }
+              if (Array.isArray(s.tags) && s.tags.length) {
+                out.tags = s.tags.map(function (t) { return String(t); }).slice(0, 8);
+              }
               if (s.cardio) {
                 out.cardio = true;
                 out.minutes = Number(s.minutes) || 0;
@@ -679,6 +1059,10 @@
     data.sound = obj.sound !== false;
     data.vibrate = obj.vibrate !== false;
     data.dark = !!obj.dark;
+    data.heightCm = Number(obj.heightCm) > 0 ? Number(obj.heightCm) : 0;
+    data.weightKg = Number(obj.weightKg) > 0 ? Number(obj.weightKg) : 0;
+    data.weeklyGoal = Math.min(7, Math.max(0, Math.round(Number(obj.weeklyGoal) || 0)));
+    data.historyOpen = !!obj.historyOpen;
     data.schema = SCHEMA;
   }
   async function persist() {
@@ -827,6 +1211,8 @@
       btn.addEventListener('click', function () {
         selectedCategory = active ? null : cat;
         editMode = false;
+        exSearch = '';
+        $('ex-search').value = '';
         disarm();
         $('add-exercise-form').style.display = 'none';
         closeQuickEntry();
@@ -847,9 +1233,24 @@
     editBtn.classList.toggle('on', editMode);
     editBtn.textContent = editMode ? '편집 완료' : '종목 편집';
 
+    $('ex-search-wrap').style.display = editMode ? 'none' : '';
+    var none = $('ex-search-none');
+    none.style.display = 'none';
+    var q = normName(exSearch);
+    $('ex-search-clear').style.display = exSearch ? 'flex' : 'none';
+
     var wrap = $('exercise-chips');
     wrap.innerHTML = '';
-    exercisesFor(selectedCategory).forEach(function (name) {
+    var listed = exercisesFor(selectedCategory);
+    if (!editMode) {
+      var used = usageCount(selectedCategory);
+      listed = listed.slice().sort(function (a, b) {
+        var d = (used[b] || 0) - (used[a] || 0);
+        return d !== 0 ? d : 0;
+      });
+      if (q) listed = listed.filter(function (n) { return normName(n).indexOf(q) !== -1; });
+    }
+    listed.forEach(function (name) {
       var btn = document.createElement('button');
       btn.className = 'wt-chip' + (editMode ? ' deletable' : '');
       btn.innerHTML = escapeHtml(name) + (editMode ? svg('trash', 13) : '');
@@ -874,24 +1275,51 @@
       wrap.appendChild(btn);
     });
 
-    if (!editMode) {
-      var addBtn = document.createElement('button');
-      addBtn.className = 'wt-chip';
-      addBtn.innerHTML = svg('plus', 13) + '직접 추가';
-      addBtn.addEventListener('click', function () {
-        var form = $('add-exercise-form');
-        form.style.display = 'flex';
-        $('add-exercise-input').value = '';
-        $('add-exercise-input').focus();
-      });
-      wrap.appendChild(addBtn);
+    if (!editMode && exSearch.trim()) {
+      var typed = exSearch.trim();
+      var exists = exercisesFor(selectedCategory).some(function (n) { return normName(n) === normName(typed); });
+      if (!exists) {
+        var newBtn = document.createElement('button');
+        newBtn.className = 'wt-chip wt-chip-new';
+        newBtn.innerHTML = svg('plus', 13) + '\'' + escapeHtml(typed) + '\' 새 종목으로 추가';
+        newBtn.addEventListener('click', function () {
+          commitNewExercise(typed);
+        });
+        wrap.appendChild(newBtn);
+        if (!listed.length) {
+          none.style.display = '';
+          none.textContent = '일치하는 종목이 없습니다. 오타가 아닌지 확인한 뒤 추가하세요.';
+        }
+      }
     }
   }
 
-  function commitNewExercise() {
+  // 같은 부위에서 종목별 기록 횟수 — 자주 쓰는 종목을 앞에 노출
+  function usageCount(cat) {
+    var out = {};
+    data.days.forEach(function (day) {
+      (day.exercises || []).forEach(function (ex) {
+        if (ex.category !== cat) return;
+        out[ex.name] = (out[ex.name] || 0) + 1;
+      });
+    });
+    return out;
+  }
+
+  function commitNewExercise(forced) {
     var input = $('add-exercise-input');
-    var name = (input.value || '').trim();
+    var name = (forced !== undefined ? String(forced) : (input.value || '')).trim();
     if (!name || !selectedCategory) return;
+    var dup = exercisesFor(selectedCategory).find(function (n) { return normName(n) === normName(name); });
+    if (dup) {
+      exSearch = '';
+      $('ex-search').value = '';
+      $('add-exercise-form').style.display = 'none';
+      input.value = '';
+      renderExercisePicker();
+      openQuickEntry(selectedCategory, dup);
+      return;
+    }
     var hidden = data.hiddenExercises[selectedCategory] || [];
     var hi = hidden.indexOf(name);
     if (hi !== -1) hidden.splice(hi, 1);
@@ -900,11 +1328,37 @@
       data.customExercises[selectedCategory].push(name);
     }
     persist();
+    exSearch = '';
+    $('ex-search').value = '';
     $('add-exercise-form').style.display = 'none';
     input.value = '';
     renderExercisePicker();
     openQuickEntry(selectedCategory, name);
+    toast('\'' + name + '\' 종목을 추가했습니다');
   }
+
+  $('ex-search').addEventListener('input', function () {
+    exSearch = this.value || '';
+    renderExercisePicker();
+  });
+  $('ex-search').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    var typed = (this.value || '').trim();
+    if (!typed || !selectedCategory) return;
+    var hit = exercisesFor(selectedCategory).filter(function (n) { return normName(n).indexOf(normName(typed)) !== -1; });
+    if (hit.length === 1) {
+      exSearch = '';
+      this.value = '';
+      renderExercisePicker();
+      openQuickEntry(selectedCategory, hit[0]);
+    }
+  });
+  $('ex-search-clear').addEventListener('click', function () {
+    exSearch = '';
+    $('ex-search').value = '';
+    renderExercisePicker();
+  });
   $('add-exercise-confirm').addEventListener('click', commitNewExercise);
   $('add-exercise-input').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); commitNewExercise(); }
@@ -924,6 +1378,40 @@
   function setWarmup(on) {
     warmupOn = !!on;
     $('qe-warmup').classList.toggle('active', warmupOn);
+  }
+
+  function setTags(list) {
+    tagsSelected = (list || []).slice(0, 8);
+    renderTagChips();
+  }
+  function syncTagToggle() {
+    var btn = $('qe-tag-toggle');
+    btn.classList.toggle('on', tagsSelected.length > 0);
+    btn.textContent = tagsSelected.length ? '특이사항 ' + tagsSelected.length : '특이사항';
+  }
+  function renderTagChips() {
+    var wrap = $('qe-tag-chips');
+    wrap.style.display = tagPanelOpen ? 'flex' : 'none';
+    syncTagToggle();
+    if (!tagPanelOpen) return;
+    wrap.innerHTML = '';
+    TAGS.forEach(function (t) {
+      var c = document.createElement('button');
+      c.type = 'button';
+      c.className = 'wt-tag-chip' + (tagsSelected.indexOf(t) !== -1 ? ' on' : '');
+      c.textContent = t;
+      c.addEventListener('click', function () {
+        var i = tagsSelected.indexOf(t);
+        if (i === -1) tagsSelected.push(t); else tagsSelected.splice(i, 1);
+        c.classList.toggle('on', tagsSelected.indexOf(t) !== -1);
+        syncTagToggle();
+      });
+      wrap.appendChild(c);
+    });
+  }
+  function tagMini(s) {
+    if (!s.tags || !s.tags.length) return '';
+    return s.tags.map(function (t) { return '<span class="wt-tag-mini">' + escapeHtml(t) + '</span>'; }).join('');
   }
 
   function setRpe(key) {
@@ -949,11 +1437,33 @@
     });
   }
 
-  function applyModeFields(category) {
+  function applyModeFields(category, name) {
     var cardio = isCardio(category);
     $('qe-strength-fields').style.display = cardio ? 'none' : 'flex';
     $('qe-cardio-fields').style.display = cardio ? 'block' : 'none';
     $('qe-warmup').style.display = cardio ? 'none' : '';
+    applyBodyweightMode(cardio ? null : name);
+  }
+  function applyBodyweightMode(name) {
+    var note = $('qe-bw-note');
+    var label = $('qe-weight-label');
+    var r = name ? bwRatio(name) : 0;
+    if (!r) {
+      note.style.display = 'none';
+      label.textContent = '무게(kg)';
+      return;
+    }
+    label.textContent = '추가 중량(kg)';
+    note.style.display = '';
+    if (data.weightKg > 0) {
+      var load = bwLoadFor(name);
+      note.className = 'wt-bw-note';
+      note.textContent = '맨몸운동 — 체중 ' + data.weightKg + 'kg의 ' + Math.round(r * 100) + '%인 ' +
+        load + 'kg이 볼륨에 반영됩니다. 무게추를 달았다면 추가분만 입력하세요. (비율은 추정치)';
+    } else {
+      note.className = 'wt-bw-note warn';
+      note.textContent = '맨몸운동입니다. 설정 > 신체 정보에 몸무게를 입력하면 체중이 볼륨에 반영됩니다.';
+    }
   }
   function exitEditMode() {
     editingSetIndex = -1;
@@ -974,7 +1484,8 @@
     editingSetIndex = -1;
     setWarmup(false);
     setRpe(null);
-    applyModeFields(category);
+    setTags([]);
+    applyModeFields(category, name);
     $('quick-entry').style.display = '';
     $('qe-name').textContent = name;
     $('qe-note').value = '';
@@ -986,8 +1497,7 @@
     var repeatBtn = $('qe-repeat-last');
 
     if (last) {
-      $('qe-last').textContent = fmtDisplayDate(last.date) + ' 기록: ' +
-        last.sets.map(function (s) { return setLabel(s) + (s.warmup ? '(W)' : ''); }).join(', ');
+      renderLastRecord(last);
       var pool = workSets(last.sets);
       var ref = pool.length ? pool[pool.length - 1] : last.sets[last.sets.length - 1];
       if (cardio) {
@@ -1002,6 +1512,8 @@
       repeatBtn.onclick = function () {
         last.sets.forEach(function (x) {
           var copy = { weight: x.weight, reps: x.reps, warmup: !!x.warmup };
+          var cLoad = bwLoadFor(currentQE.name);
+          if (cLoad > 0) { copy.bw = true; copy.bwLoad = cLoad; }
           if (x.cardio) {
             copy = { cardio: true, minutes: x.minutes || 0, intensity: x.intensity || 0, weight: 0, reps: 0, warmup: false };
             if (x.distance) copy.distance = x.distance;
@@ -1015,9 +1527,9 @@
         saveDraft();
       };
     } else {
-      $('qe-last').textContent = '이전 기록이 없습니다.';
+      renderLastRecord(null);
       if (cardio) { $('qe-minutes').value = 20; $('qe-intensity').value = 5; $('qe-distance').value = ''; }
-      else { $('qe-weight').value = 20; $('qe-reps').value = 10; }
+      else { $('qe-weight').value = bwRatio(name) ? 0 : 20; $('qe-reps').value = 10; }
       repeatBtn.style.display = 'none';
     }
     renderQESetList();
@@ -1043,11 +1555,12 @@
       var tailInfo = '';
       if (s.cardio) tailInfo = '';
       else if (s.warmup) tailInfo = '<span class="wt-warm-badge">W</span>';
-      else tailInfo = '<span style="color:var(--wt-text-muted);font-weight:400;margin-left:6px;">' + Math.round(s.weight * s.reps).toLocaleString() + 'kg</span>';
+      else tailInfo = '<span style="color:var(--wt-text-muted);font-weight:400;margin-left:6px;">' + Math.round(effWeight(s) * s.reps).toLocaleString() + 'kg</span>';
 
       var label = document.createElement('div');
       label.style.cssText = 'flex:1; min-width:0; cursor:pointer;';
-      label.innerHTML = '<span>' + (i + 1) + '. ' + setLabel(s) + tailInfo + rpeBadge(s) + '</span>' +
+      label.innerHTML = '<span>' + (i + 1) + '. ' + setLabel(s) + tailInfo +
+        (s.planned ? '<span class="wt-plan-badge">예정</span>' : '') + rpeBadge(s) + tagMini(s) + '</span>' +
         (s.note ? '<span style="display:block;font-size:11px;font-weight:400;color:var(--wt-text-muted);margin-top:2px;">' + escapeHtml(s.note) + '</span>' : '');
       label.addEventListener('click', function () { beginEditSet(i); });
 
@@ -1087,6 +1600,7 @@
     $('qe-note').value = s.note || '';
     setWarmup(!!s.warmup);
     setRpe(s.rpe || null);
+    setTags(s.tags || []);
     $('qe-add-label').textContent = (i + 1) + '번 ' + (isCardio(currentQE.category) ? '기록' : '세트') + ' 수정';
     $('qe-cancel-edit').style.display = '';
     $('qe-repeat-last').style.display = 'none';
@@ -1099,6 +1613,10 @@
   $('qe-close').addEventListener('click', closeQuickEntry);
   $('qe-cancel-edit').addEventListener('click', exitEditMode);
   $('qe-warmup').addEventListener('click', function () { setWarmup(!warmupOn); });
+  $('qe-tag-toggle').addEventListener('click', function () {
+    tagPanelOpen = !tagPanelOpen;
+    renderTagChips();
+  });
 
   $('qe-weight-minus').addEventListener('click', function () {
     var el = $('qe-weight'); el.value = Math.max(0, Math.round(((parseFloat(el.value) || 0) - 2.5) * 100) / 100);
@@ -1147,10 +1665,13 @@
       if (isNaN(w) || w < 0) { showError('무게를 입력해 주세요.'); return; }
       if (isNaN(r) || r <= 0) { showError('횟수를 입력해 주세요.'); return; }
       entry = { weight: w, reps: r, warmup: warmupOn };
+      var bwl = bwLoadFor(currentQE.name);
+      if (bwl > 0) { entry.bw = true; entry.bwLoad = bwl; }
     }
 
     if (note) entry.note = note;
     if (rpeSelected) entry.rpe = rpeSelected;
+    if (tagsSelected.length) entry.tags = tagsSelected.slice();
     clearError();
 
     if (editingSetIndex >= 0) {
@@ -1159,6 +1680,7 @@
       $('qe-note').value = '';
       setWarmup(false);
       setRpe(null);
+      setTags([]);
       renderStaging();
       saveDraft();
       return;
@@ -1168,6 +1690,7 @@
     $('qe-note').value = '';
     setWarmup(false);
     setRpe(null);
+    setTags([]);
     commitStaging();
     renderQESetList();
     renderStaging();
@@ -1175,11 +1698,43 @@
     startRestTimer();
   });
 
+  // ---------- 저장 전 기록 알림 ----------
+  function stagingCounts() {
+    var ex = 0, sets = 0;
+    staging.forEach(function (item) {
+      if (!item.sets.length) return;
+      ex += 1;
+      sets += item.sets.length;
+    });
+    return { ex: ex, sets: sets };
+  }
+  function updateUnsavedBar() {
+    var bar = $('unsaved-bar');
+    var c = stagingCounts();
+    if (!c.sets || currentTab !== 'log') { bar.style.display = 'none'; bar.classList.remove('show'); return; }
+    // 저장 영역이 화면에 보이면 알림 줄은 숨김
+    var visible = false;
+    try {
+      var r = $('staging-area').getBoundingClientRect();
+      var h = window.innerHeight || 800;
+      visible = r.top < h - 60 && r.bottom > 0;
+    } catch (e) {}
+    if (visible) { bar.style.display = 'none'; bar.classList.remove('show'); return; }
+    $('unsaved-bar-text').textContent = '저장 전 기록 ' + c.ex + '종목 · ' + c.sets + '세트';
+    bar.style.display = 'flex';
+    requestAnimationFrame(function () { bar.classList.add('show'); });
+  }
+  $('unsaved-bar').addEventListener('click', function () {
+    safeScrollIntoView($('staging-area'));
+    setTimeout(updateUnsavedBar, 400);
+  });
+  window.addEventListener('scroll', updateUnsavedBar, { passive: true });
+
   // ---------- staging ----------
   function renderStaging() {
     var area = $('staging-area'), list = $('staging-list');
     updateTodayVolume();
-    if (staging.length === 0) { area.style.display = 'none'; return; }
+    if (staging.length === 0) { area.style.display = 'none'; updateUnsavedBar(); return; }
     area.style.display = '';
     list.innerHTML = '';
     var dateVal = $('entry-date').value;
@@ -1212,7 +1767,7 @@
       } else if (hasCardio(item.sets)) {
         summary = item.sets.map(setLabel).join(' / ') + ' · 총 ' + totalMinutes(item.sets) + '분';
       } else {
-        summary = item.sets.map(function (s) { return s.weight + 'kg×' + s.reps + (s.warmup ? 'W' : ''); }).join(', ') +
+        summary = item.sets.map(function (s) { return setLabel(s).replace(' × ', '×') + (s.warmup ? 'W' : ''); }).join(', ') +
           ' · ' + fmtVol(setVolume(item.sets)) + (warmCount ? ' · 워밍업 ' + warmCount : '');
       }
       var mid = document.createElement('div');
@@ -1241,6 +1796,12 @@
       row.appendChild(icon); row.appendChild(mid); row.appendChild(del);
       list.appendChild(row);
     });
+
+    var c = stagingCounts();
+    $('draft-note').textContent = c.sets
+      ? c.ex + '종목 · ' + c.sets + '세트 — 아직 저장되지 않았습니다'
+      : '임시 저장됨 — 앱을 닫아도 유지됩니다';
+    updateUnsavedBar();
   }
 
   function updateTodayVolume() {
@@ -1254,22 +1815,45 @@
 
   // ---------- routines ----------
   function renderRoutineChips() {
-    var row = $('routine-row'), wrap = $('routine-chips');
-    if (!data.routines.length) { row.style.display = 'none'; return; }
-    row.style.display = '';
+    var wrap = $('routine-chips');
+    $('routine-empty').style.display = data.routines.length ? 'none' : '';
+    wrap.style.display = data.routines.length ? 'flex' : 'none';
     wrap.innerHTML = '';
     data.routines.forEach(function (routine) {
       var btn = document.createElement('button');
       btn.className = 'wt-chip';
       btn.textContent = routine.name;
       btn.addEventListener('click', function () {
+        var dateVal = $('entry-date').value;
+        var filled = 0, added = 0;
         (routine.items || []).forEach(function (it) {
-          if (!staging.find(function (s) { return s.name === it.name && s.category === it.category; })) {
-            staging.push({ category: it.category, name: it.name, sets: [] });
+          if (staging.find(function (s) { return s.name === it.name && s.category === it.category; })) return;
+          added += 1;
+          var item = { category: it.category, name: it.name, sets: [] };
+          // 지난 기록의 본세트를 미리 채워 둠 — 'planned'는 임시 표시이며 저장 시 제거됨
+          var last = lastPerformance(it.name, dateVal);
+          if (last) {
+            workSets(last.sets).forEach(function (x) {
+              var c;
+              if (x.cardio) {
+                c = { cardio: true, minutes: x.minutes || 0, intensity: x.intensity || 0, weight: 0, reps: 0, warmup: false, planned: true };
+                if (x.distance) c.distance = x.distance;
+              } else {
+                c = { weight: x.weight, reps: x.reps, warmup: false, planned: true };
+                var load = bwLoadFor(it.name);
+                if (load > 0) { c.bw = true; c.bwLoad = load; }
+              }
+              item.sets.push(c);
+              filled += 1;
+            });
           }
+          staging.push(item);
         });
         renderStaging();
         saveDraft();
+        if (!added) toast('이미 불러온 루틴입니다');
+        else if (filled) toast('지난 기록으로 ' + filled + '세트를 채웠습니다 — 확인 후 저장하세요');
+        else toast('루틴을 불러왔습니다');
       });
 
       var del = document.createElement('button');
@@ -1291,6 +1875,231 @@
       wrap.appendChild(group);
     });
   }
+
+  // ---------- 루틴 관리 ----------
+  function openRoutineManager(open) {
+    routineMgrOpen = open;
+    if (!open) { routineEditing = null; rmCat = null; }
+    renderRoutineManager();
+  }
+  $('routine-manage-btn').addEventListener('click', function () {
+    openRoutineManager(!routineMgrOpen);
+  });
+
+  function renderRoutineManager() {
+    var panel = $('routine-manager');
+    panel.style.display = routineMgrOpen ? '' : 'none';
+    var btn = $('routine-manage-btn');
+    btn.classList.toggle('on', routineMgrOpen);
+    if (!routineMgrOpen) { disarm(); return; }
+    if (routineEditing) { $('rm-list').style.display = 'none'; renderRoutineEditor(); }
+    else { $('rm-editor').style.display = 'none'; $('rm-list').style.display = ''; renderRoutineList(); }
+  }
+
+  function renderRoutineList() {
+    var el = $('rm-list');
+    el.innerHTML = '';
+
+    if (!data.routines.length) {
+      var hint = document.createElement('p');
+      hint.style.cssText = 'font-size:12px;color:var(--wt-text-muted);margin:0 0 10px;';
+      hint.textContent = '아직 루틴이 없습니다. 아래에서 새로 만들어 보세요.';
+      el.appendChild(hint);
+    }
+
+    data.routines.forEach(function (r, idx) {
+      var row = document.createElement('div');
+      row.className = 'wt-rm-row';
+      row.style.marginBottom = '6px';
+
+      var nm = document.createElement('div');
+      nm.className = 'wt-rm-name';
+      nm.innerHTML = escapeHtml(r.name) +
+        '<span style="font-weight:600;color:var(--wt-text-muted);font-size:11px;margin-left:6px;">' +
+        (r.items || []).length + '종목</span>';
+
+      var up = document.createElement('button');
+      up.type = 'button'; up.className = 'wt-rm-ord'; up.setAttribute('aria-label', '위로');
+      up.innerHTML = svg('chevron-up', 14);
+      up.disabled = idx === 0;
+      up.addEventListener('click', function () {
+        var t = data.routines[idx - 1]; data.routines[idx - 1] = data.routines[idx]; data.routines[idx] = t;
+        persist(); renderRoutineList(); renderRoutineChips();
+      });
+
+      var down = document.createElement('button');
+      down.type = 'button'; down.className = 'wt-rm-ord'; down.setAttribute('aria-label', '아래로');
+      down.innerHTML = svg('chevron-down', 14);
+      down.disabled = idx === data.routines.length - 1;
+      down.addEventListener('click', function () {
+        var t = data.routines[idx + 1]; data.routines[idx + 1] = data.routines[idx]; data.routines[idx] = t;
+        persist(); renderRoutineList(); renderRoutineChips();
+      });
+
+      var edit = document.createElement('button');
+      edit.type = 'button'; edit.className = 'wt-icon-btn-sm'; edit.setAttribute('aria-label', r.name + ' 편집');
+      edit.innerHTML = svg('pencil', 14);
+      edit.addEventListener('click', function () {
+        routineEditing = {
+          id: r.id, name: r.name,
+          items: (r.items || []).map(function (it) { return { category: it.category, name: it.name }; })
+        };
+        rmCat = null;
+        renderRoutineManager();
+      });
+
+      var del = document.createElement('button');
+      del.type = 'button'; del.className = 'wt-icon-btn-sm danger'; del.setAttribute('aria-label', r.name + ' 삭제');
+      del.innerHTML = svg('trash', 14);
+      del.addEventListener('click', function () {
+        armDelete(del, '삭제?', function () {
+          data.routines = data.routines.filter(function (x) { return x.id !== r.id; });
+          persist(); renderRoutineList(); renderRoutineChips();
+          toast('루틴을 삭제했습니다');
+        });
+      });
+
+      row.appendChild(nm); row.appendChild(up); row.appendChild(down);
+      row.appendChild(edit); row.appendChild(del);
+      el.appendChild(row);
+    });
+
+    var add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'wt-btn-secondary';
+    add.style.cssText = 'width:100%;margin-top:6px;';
+    add.innerHTML = svg('plus', 15) + '새 루틴 만들기';
+    add.addEventListener('click', function () {
+      routineEditing = { id: null, name: '', items: [] };
+      rmCat = null;
+      renderRoutineManager();
+    });
+    el.appendChild(add);
+  }
+
+  function renderRoutineEditor() {
+    var ed = $('rm-editor');
+    ed.style.display = '';
+    $('rm-msg').style.display = 'none';
+    if ($('rm-name').value !== routineEditing.name) $('rm-name').value = routineEditing.name;
+
+    var wrap = $('rm-items');
+    wrap.innerHTML = '';
+    $('rm-empty').style.display = routineEditing.items.length ? 'none' : '';
+
+    routineEditing.items.forEach(function (it, i) {
+      var m = meta(it.category);
+      var row = document.createElement('div');
+      row.className = 'wt-rm-row';
+
+      var nm = document.createElement('div');
+      nm.className = 'wt-rm-name';
+      nm.innerHTML = '<span class="wt-rm-cat" style="background:' + m.color + '22;color:' + m.color + ';">' +
+        escapeHtml(it.category) + '</span>' + escapeHtml(it.name);
+
+      var up = document.createElement('button');
+      up.type = 'button'; up.className = 'wt-rm-ord'; up.setAttribute('aria-label', '위로');
+      up.innerHTML = svg('chevron-up', 14);
+      up.disabled = i === 0;
+      up.addEventListener('click', function () {
+        var t = routineEditing.items[i - 1];
+        routineEditing.items[i - 1] = routineEditing.items[i];
+        routineEditing.items[i] = t;
+        renderRoutineEditor();
+      });
+
+      var down = document.createElement('button');
+      down.type = 'button'; down.className = 'wt-rm-ord'; down.setAttribute('aria-label', '아래로');
+      down.innerHTML = svg('chevron-down', 14);
+      down.disabled = i === routineEditing.items.length - 1;
+      down.addEventListener('click', function () {
+        var t = routineEditing.items[i + 1];
+        routineEditing.items[i + 1] = routineEditing.items[i];
+        routineEditing.items[i] = t;
+        renderRoutineEditor();
+      });
+
+      var del = document.createElement('button');
+      del.type = 'button'; del.className = 'wt-icon-btn-sm danger'; del.setAttribute('aria-label', it.name + ' 빼기');
+      del.innerHTML = svg('x', 14);
+      del.addEventListener('click', function () {
+        routineEditing.items.splice(i, 1);
+        renderRoutineEditor();
+      });
+
+      row.appendChild(nm); row.appendChild(up); row.appendChild(down); row.appendChild(del);
+      wrap.appendChild(row);
+    });
+
+    renderRmPicker();
+  }
+
+  function renderRmPicker() {
+    var cats = $('rm-cats'), exs = $('rm-exs');
+    cats.innerHTML = '';
+    CATEGORIES.forEach(function (cat) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wt-tag-chip' + (rmCat === cat ? ' on' : '');
+      b.textContent = cat;
+      b.addEventListener('click', function () {
+        rmCat = (rmCat === cat) ? null : cat;
+        renderRmPicker();
+      });
+      cats.appendChild(b);
+    });
+
+    exs.innerHTML = '';
+    if (!rmCat) { exs.style.display = 'none'; return; }
+    exs.style.display = 'flex';
+    exercisesFor(rmCat).forEach(function (name) {
+      var already = routineEditing.items.some(function (it) { return it.name === name && it.category === rmCat; });
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wt-chip';
+      b.textContent = name;
+      if (already) { b.disabled = true; b.style.opacity = '0.35'; }
+      b.addEventListener('click', function () {
+        if (already) return;
+        routineEditing.items.push({ category: rmCat, name: name });
+        renderRoutineEditor();
+      });
+      exs.appendChild(b);
+    });
+  }
+
+  $('rm-name').addEventListener('input', function () {
+    if (routineEditing) routineEditing.name = this.value;
+  });
+  $('rm-cancel').addEventListener('click', function () {
+    routineEditing = null; rmCat = null;
+    $('rm-name').value = '';
+    renderRoutineManager();
+  });
+  $('rm-save').addEventListener('click', function () {
+    if (!routineEditing) return;
+    var msg = $('rm-msg');
+    var name = (routineEditing.name || '').trim();
+    if (!name) { msg.textContent = '루틴 이름을 입력해 주세요.'; msg.style.display = 'block'; return; }
+    if (!routineEditing.items.length) { msg.textContent = '종목을 1개 이상 담아 주세요.'; msg.style.display = 'block'; return; }
+    var dup = data.routines.some(function (r) {
+      return r.id !== routineEditing.id && normName(r.name) === normName(name);
+    });
+    if (dup) { msg.textContent = '같은 이름의 루틴이 이미 있습니다.'; msg.style.display = 'block'; return; }
+
+    if (routineEditing.id) {
+      var target = data.routines.find(function (r) { return r.id === routineEditing.id; });
+      if (target) { target.name = name; target.items = routineEditing.items.slice(); }
+    } else {
+      data.routines.push({ id: uid(), name: name, items: routineEditing.items.slice() });
+    }
+    persist();
+    routineEditing = null; rmCat = null;
+    $('rm-name').value = '';
+    renderRoutineChips();
+    renderRoutineManager();
+    toast('\'' + name + '\' 루틴을 저장했습니다');
+  });
 
   $('save-routine-btn').addEventListener('click', function () {
     if (!staging.length) return;
@@ -1331,7 +2140,12 @@
     var day = data.days.find(function (d) { return d.date === dateVal; });
     if (!day) { day = { date: dateVal, exercises: [] }; data.days.push(day); }
     valid.forEach(function (item) {
-      day.exercises.push({ name: item.name, category: item.category, sets: item.sets });
+      var cleaned = item.sets.map(function (st) {
+        var c = {};
+        Object.keys(st).forEach(function (k) { if (k !== 'planned') c[k] = st[k]; });
+        return c;
+      });
+      day.exercises.push({ name: item.name, category: item.category, sets: cleaned });
     });
 
     await persist();
@@ -1345,18 +2159,36 @@
     $('add-exercise-form').style.display = 'none';
     renderAll();
     safeScrollTop();
+    toast('오늘 기록을 저장했습니다');
   });
 
   // ---------- history ----------
+  function applyHistoryOpen() {
+    var head = $('history-head'), list = $('history-list');
+    head.classList.toggle('open', !!data.historyOpen);
+    head.setAttribute('aria-expanded', data.historyOpen ? 'true' : 'false');
+    list.style.display = data.historyOpen ? '' : 'none';
+  }
+  $('history-head').addEventListener('click', function () {
+    data.historyOpen = !data.historyOpen;
+    applyHistoryOpen();
+    persist();
+  });
+
   function renderHistory() {
     var c = $('history-list');
     c.innerHTML = '';
     var days = data.days.slice().sort(function (a, b) { return b.date.localeCompare(a.date); }).slice(0, 10);
     if (!days.length) {
+      $('history-head').style.display = 'none';
+      c.style.display = '';
       c.innerHTML = '<p style="font-size:13px;color:var(--wt-text-muted);text-align:center;padding:2rem 0;">아직 기록이 없습니다. 위에서 부위를 선택해 첫 운동을 기록해 보세요.</p>';
       return;
     }
+    $('history-head').style.display = 'flex';
+    $('history-count').textContent = days.length + '일';
     days.forEach(function (d) { c.appendChild(buildDayCard(d)); });
+    applyHistoryOpen();
   }
 
   function buildDayCard(day) {
@@ -1371,7 +2203,9 @@
     if (dayMin > 0) headBits.push(dayMin + '분');
     var header = document.createElement('div');
     header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;';
-    header.innerHTML = '<p style="font-size:12px;color:var(--wt-text-muted);margin:0;font-weight:700;">' + fmtDisplayDate(day.date) + '</p>' +
+    var isToday = day.date === $('entry-date').value;
+    header.innerHTML = '<p style="font-size:12px;color:var(--wt-text-muted);margin:0;font-weight:700;">' + fmtDisplayDate(day.date) +
+      (isToday ? '<span class="wt-saved-tag">저장됨</span>' : '') + '</p>' +
       '<p style="font-size:12px;margin:0;font-weight:700;color:var(--wt-accent);">' + (headBits.join(' · ') || '-') + '</p>';
     card.appendChild(header);
 
@@ -1433,14 +2267,18 @@
     var grid = $('cal-grid');
     grid.innerHTML = '';
 
-    ['일', '월', '화', '수', '목', '금', '토'].forEach(function (d) {
+    ['월', '화', '수', '목', '금', '토', '일'].forEach(function (d) {
       var el = document.createElement('div');
       el.style.cssText = 'text-align:center;font-size:11px;font-weight:700;color:var(--wt-text-muted);padding-bottom:4px;';
       el.textContent = d;
       grid.appendChild(el);
     });
+    var headTail = document.createElement('div');
+    headTail.style.cssText = 'text-align:center;font-size:10px;font-weight:700;color:var(--wt-text-muted);padding-bottom:4px;';
+    headTail.textContent = data.weeklyGoal > 0 ? '주' : '';
+    grid.appendChild(headTail);
 
-    var first = new Date(y, mo, 1).getDay();
+    var first = (new Date(y, mo, 1).getDay() + 6) % 7;
     var total = new Date(y, mo + 1, 0).getDate();
     var todayIso = fmtDate(new Date());
 
@@ -1470,7 +2308,31 @@
           renderCalDetail();
         });
         grid.appendChild(cell);
+        if ((first + n) % 7 === 0) appendWeekFlag(new Date(y, mo, n));
       })(n);
+    }
+    var tailBlanks = (7 - ((first + total) % 7)) % 7;
+    for (var t = 0; t < tailBlanks; t++) {
+      var tb = document.createElement('div');
+      tb.className = 'wt-cal-cell empty';
+      grid.appendChild(tb);
+    }
+    if (tailBlanks > 0) appendWeekFlag(new Date(y, mo, total));
+
+    function appendWeekFlag(anyDayInWeek) {
+      var flag = document.createElement('div');
+      flag.className = 'wt-wk-flag';
+      if (data.weeklyGoal > 0) {
+        var ws = weekStart(anyDayInWeek);
+        var we = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 6);
+        var cnt = workoutDaysIn(fmtDate(ws), fmtDate(we));
+        if (cnt >= data.weeklyGoal) {
+          flag.classList.add('done');
+          flag.innerHTML = '<span class="wt-wk-badge">' + svg('check', 13) + '</span>';
+          flag.title = '주 목표 ' + data.weeklyGoal + '일 달성 (' + cnt + '일)';
+        }
+      }
+      grid.appendChild(flag);
     }
 
     $('cal-legend').innerHTML = CATEGORIES.filter(function (c) { return c !== '기타'; }).map(function (c) {
@@ -1519,7 +2381,21 @@
       });
     });
 
+    var doneDays = workoutDaysIn(startIso, endIso);
     $('wk-days').textContent = weekDays.length + '일';
+    var goalEl = $('wk-goal');
+    if (data.weeklyGoal > 0) {
+      goalEl.style.display = '';
+      if (doneDays >= data.weeklyGoal) {
+        goalEl.textContent = '목표 ' + data.weeklyGoal + '일 달성';
+        goalEl.style.color = 'var(--wt-good)';
+      } else {
+        goalEl.textContent = '목표 ' + data.weeklyGoal + '일';
+        goalEl.style.color = 'var(--wt-text-muted)';
+      }
+    } else {
+      goalEl.style.display = 'none';
+    }
     $('wk-volume').textContent = totalVol ? fmtVol(totalVol) : '-';
     $('wk-sets').textContent = totalSets ? totalSets + '세트' : '-';
 
@@ -1578,7 +2454,7 @@
     ctx.clearRect(0, 0, rect.width, rect.height);
     if (!points.length) return;
 
-    var accent = cssVar('--wt-accent', '#FF7A55');
+    var accent = cssVar('--wt-accent', '#2563EB');
     var grid = cssVar('--wt-border', '#EDEDF1');
     var muted = cssVar('--wt-text-muted', '#9797A3');
     var cardBg = cssVar('--wt-card', '#FFFFFF');
@@ -1749,6 +2625,34 @@
 
     drawLineChart('progress-canvas', points, chartMode, labelFn);
     renderProgressTable(points, cardio);
+    renderProgressNotes(name);
+  }
+
+  function renderProgressNotes(name) {
+    var card = $('progress-notes');
+    var list = $('progress-notes-list');
+    var rows = [];
+    data.days.slice().sort(function (a, b) { return b.date.localeCompare(a.date); })
+      .forEach(function (day) {
+        (day.exercises || []).forEach(function (ex) {
+          if (ex.name !== name) return;
+          (ex.sets || []).forEach(function (st) {
+            if (!st.note && !(st.tags && st.tags.length)) return;
+            rows.push({ date: day.date, note: st.note || '', tags: st.tags || [], label: setLabel(st) });
+          });
+        });
+      });
+    if (!rows.length) { card.style.display = 'none'; list.innerHTML = ''; return; }
+    card.style.display = '';
+    list.innerHTML = rows.slice(0, 15).map(function (r) {
+      var tags = r.tags.map(function (t) { return '<span class="wt-tag-mini">' + escapeHtml(t) + '</span>'; }).join('');
+      return '<div class="wt-note-row">' +
+        '<span class="wt-note-date">' + escapeHtml(fmtDisplayDate(r.date)) + '</span>' +
+        '<span style="color:var(--wt-text-muted);font-size:11px;margin-left:6px;">' + escapeHtml(r.label) + '</span>' +
+        tags +
+        (r.note ? '<div style="margin-top:3px;">' + escapeHtml(r.note) + '</div>' : '') +
+        '</div>';
+    }).join('');
   }
 
   function renderProgressTable(points, cardio) {
@@ -1796,7 +2700,41 @@
     $('dark-switch').classList.toggle('on', data.dark);
     $('vibe-support').textContent = canVibrate ? '' : '이 브라우저는 진동을 지원하지 않습니다';
     $('vibe-switch').style.opacity = canVibrate ? '1' : '0.4';
+    $('goal-display').textContent = data.weeklyGoal > 0 ? '주 ' + data.weeklyGoal + '일' : '사용 안 함';
+    $('goal-hint').textContent = data.weeklyGoal > 0 ? '채운 주는 캘린더에 체크 표시' : '';
+    renderBody();
   }
+
+  $('goal-minus').addEventListener('click', function () {
+    data.weeklyGoal = Math.max(0, data.weeklyGoal - 1);
+    renderSettings();
+    renderCalendar();
+    renderWeeklySummary();
+    persist();
+  });
+  $('goal-plus').addEventListener('click', function () {
+    data.weeklyGoal = Math.min(7, data.weeklyGoal + 1);
+    renderSettings();
+    renderCalendar();
+    renderWeeklySummary();
+    persist();
+  });
+
+  $('body-height').addEventListener('change', function () {
+    var v = parseFloat(this.value);
+    data.heightCm = (isFinite(v) && v > 0 && v <= 260) ? v : 0;
+    if (!data.heightCm) this.value = '';
+    renderBmi();
+    persist();
+  });
+  $('body-weight').addEventListener('change', function () {
+    var v = parseFloat(this.value);
+    data.weightKg = (isFinite(v) && v > 0 && v <= 400) ? v : 0;
+    if (!data.weightKg) this.value = '';
+    renderBmi();
+    if (currentQE) applyBodyweightMode(isCardio(currentQE.category) ? null : currentQE.name);
+    persist();
+  });
 
   $('rest-minus').addEventListener('click', function () {
     data.restSeconds = Math.max(15, data.restSeconds - 15);
@@ -1858,6 +2796,7 @@
     box.style.display = 'block';
     $('export-actions').style.display = 'flex';
     backupMsg('아래 내용을 복사해서 안전한 곳에 보관하세요.', true);
+    toast('내보내기 내용이 준비됐습니다');
   });
   $('select-all-btn').addEventListener('click', function () {
     var box = $('backup-box');
@@ -1874,6 +2813,49 @@
     box.focus();
     backupMsg('백업 내용을 붙여넣은 뒤 합치기를 누르세요.', true);
   });
+  function backupFilename() { return 'workout-backup-' + fmtDate(new Date()) + '.json'; }
+  $('download-btn').addEventListener('click', function () {
+    hideBackupUI();
+    var url = null;
+    try {
+      var blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = backupFilename();
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      backupMsg(backupFilename() + ' 로 저장했습니다. 파일 앱의 다운로드 폴더를 확인하세요.', true);
+      toast('백업 파일을 저장했습니다');
+    } catch (e) {
+      backupMsg('이 환경에서는 파일 저장이 막혀 있습니다. 아래 텍스트로 내보내기를 사용하세요.', false);
+    }
+    if (url) setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 3000);
+  });
+
+  $('file-import-btn').addEventListener('click', function () {
+    hideBackupUI();
+    var f = $('file-input');
+    f.value = '';
+    f.click();
+  });
+  $('file-input').addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var box = $('backup-box');
+      box.value = String(reader.result || '');
+      box.style.display = 'block';
+      $('import-actions').style.display = 'flex';
+      backupMsg('\'' + file.name + '\' 을 읽었습니다. 아래 합치기를 누르면 기존 기록에 더해집니다.', true);
+    };
+    reader.onerror = function () { backupMsg('파일을 읽지 못했습니다.', false); };
+    reader.readAsText(file);
+  });
+
   $('backup-close').addEventListener('click', hideBackupUI);
   $('backup-close-2').addEventListener('click', hideBackupUI);
 
@@ -1921,11 +2903,14 @@
   });
 
   // ---------- tabs ----------
-  var TITLES = { log: '운동 기록', calendar: '캘린더', progress: '통계' };
+  var TITLES = { log: '운동 기록', calendar: '캘린더', progress: '통계', settings: '설정' };
+  var currentTab = 'log';
   function switchTab(tab) {
+    currentTab = tab;
     $('view-log').style.display = tab === 'log' ? '' : 'none';
     $('view-calendar').style.display = tab === 'calendar' ? '' : 'none';
     $('view-progress').style.display = tab === 'progress' ? '' : 'none';
+    $('view-settings').style.display = tab === 'settings' ? '' : 'none';
     $('screen-title').textContent = TITLES[tab];
     Array.prototype.forEach.call(document.querySelectorAll('.wt-tabbar-btn'), function (b) {
       b.classList.toggle('active', b.getAttribute('data-tab') === tab);
@@ -1934,12 +2919,13 @@
     if (tab === 'calendar') { renderCalendar(); renderCalDetail(); }
     if (tab === 'progress') {
       renderWeeklySummary();
-      renderSettings();
       requestAnimationFrame(function () {
         renderTotalVolumeChart();
         renderProgress();
       });
     }
+    if (tab === 'settings') renderSettings();
+    updateUnsavedBar();
   }
   Array.prototype.forEach.call(document.querySelectorAll('.wt-tabbar-btn'), function (b) {
     b.addEventListener('click', function () { switchTab(b.getAttribute('data-tab')); });
