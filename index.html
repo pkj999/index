@@ -616,7 +616,7 @@
 
   <div id="wt-toast" role="status" aria-live="polite"></div>
 
-  <div id="tabbar" style="display: none; position: sticky; bottom: 0; margin: 1.25rem -1rem 0; padding: 8px 1rem calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--wt-card); border-radius: 20px 20px 0 0; box-shadow: 0 -4px 16px rgba(30,30,40,0.10); z-index: 20;">
+  <div id="tabbar" style="display: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 480px; padding: 8px 1rem calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--wt-card); border-radius: 20px 20px 0 0; box-shadow: 0 -4px 16px rgba(30,30,40,0.10); z-index: 20;">
     <div style="display: flex; justify-content: space-around;">
       <button class="wt-tabbar-btn active" data-tab="log"><span data-icon="barbell" data-size="21"></span><span>기록</span></button>
       <button class="wt-tabbar-btn" data-tab="calendar"><span data-icon="calendar" data-size="21"></span><span>캘린더</span></button>
@@ -2967,6 +2967,15 @@
     renderSettings();
   }
 
+  // ---------- 하단 고정 탭바 여백 ----------
+  function syncTabbarSpace() {
+    var bar = $('tabbar');
+    if (bar.style.display === 'none') return;
+    var h = bar.getBoundingClientRect().height;
+    $('wt-root').style.paddingBottom = (h + 20) + 'px';
+  }
+  window.addEventListener('resize', syncTabbarSpace);
+
   (async function init() {
     hydrateIcons();
     await loadData();
@@ -2974,6 +2983,7 @@
     $('loading').style.display = 'none';
     $('view-log').style.display = '';
     $('tabbar').style.display = '';
+    syncTabbarSpace();
     $('entry-date').value = fmtDate(new Date());
     await loadDraft();
     $('storage-mode').textContent = store.mode === 'claude' ? '저장 위치: 클로드 앱' : '저장 위치: 이 브라우저';
