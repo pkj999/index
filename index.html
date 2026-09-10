@@ -267,6 +267,8 @@
   html[data-theme="dark"] #wt-root .wt-plan-badge { background: #2A2E36; color: #A7AFBC; }
   #wt-root .wt-pr-badge { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 5px; padding: 1px 6px; margin-left: 5px; background: #FFF1C2; color: #8A5A12; }
   html[data-theme="dark"] #wt-root .wt-pr-badge { background: #4A3A12; color: #FFD97D; }
+  #wt-root .wt-plateau-badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 3px 9px; margin: -4px 0 10px; background: #E4ECF3; color: #3D6280; }
+  html[data-theme="dark"] #wt-root .wt-plateau-badge { background: #223140; color: #8FC1E8; }
 
   /* ===== [C] 특이사항 태그 ===== */
   #wt-root .wt-tag-chip { border: 1.5px solid var(--wt-border-strong); background: var(--wt-card); color: var(--wt-text-muted); font-size: 12px; font-weight: 600; padding: 10px 12px; min-height: 40px; border-radius: 8px; cursor: pointer; transition: transform .08s ease, filter .12s ease; }
@@ -326,6 +328,7 @@
         <span id="today-volume" style="font-size: 14px; font-weight: 700;">0kg</span>
       </div>
     </div>
+    <p id="duration-caption" style="display: none; font-size: 12px; font-weight: 600; color: var(--wt-text-muted); margin: -8px 0 14px;"></p>
 
     <p id="future-note" style="display: none; font-size: 12px; font-weight: 600; color: var(--wt-accent-dark); background: var(--wt-accent-soft); border-radius: 8px; padding: 9px 12px; margin: 0 0 14px;">오늘보다 뒤의 날짜입니다. 날짜가 맞는지 확인해 주세요.</p>
 
@@ -556,6 +559,7 @@
         <div><p class="wt-stat-label">총 볼륨</p><p class="wt-stat-value" id="wk-volume">-</p></div>
         <div><p class="wt-stat-label">총 세트</p><p class="wt-stat-value" id="wk-sets">-</p></div>
       </div>
+      <p id="wk-duration" style="display: none; font-size: 12px; color: var(--wt-text-muted); margin: -8px 0 12px;"></p>
       <p class="wt-mini-label" style="margin-bottom: 8px;">부위 밸런스</p>
       <div id="wk-balance"></div>
     </div>
@@ -597,6 +601,7 @@
         <div class="wt-stat-card"><p class="wt-stat-label">기록 횟수</p><p class="wt-stat-value" id="stat-count">-</p></div>
       </div>
       <p id="progress-1rm-caption" style="display: none; font-size: 11px; color: var(--wt-text-muted); margin: -4px 0 10px;"></p>
+      <p id="progress-plateau-badge" class="wt-plateau-badge" style="display: none;"></p>
       <div class="wt-card" style="padding: 1rem;">
         <div style="display: flex; gap: 6px; margin-bottom: 12px;">
           <button id="chart-mode-weight" class="wt-seg-btn active">최고 무게</button>
@@ -783,7 +788,7 @@
 
   var STORAGE_KEY = 'workout-tracker-data';
   var LEGACY_KEYS = ['workout-log-v3', 'workout-log-v2', 'workout-log'];
-  var SCHEMA = 4;
+  var SCHEMA = 5; // day.durationMin/startedAt/endedAt(운동 소요시간) 추가. 마이그레이션 분기는 없음 — applyLoaded()가 항상 방어적으로 필드를 재구성하므로 구버전 데이터는 해당 필드가 0/미설정으로 채워짐
 
   // ---------- [저장] 저장소 어댑터 (클로드 앱 storage / 브라우저 localStorage) ----------
   var store = (function () {
@@ -974,6 +979,10 @@
   };
   var staging = [];
   var selectedCategory = null;
+  // 오늘 운동 세션 소요시간 추적용 (저장 전, 메모리 상태 — saveDraft로 새로고침 대비 영속화)
+  var sessionStartAt = null;   // 이번 세션에서 첫 세트를 추가한 시각(ms)
+  var sessionLastAt = null;    // 가장 최근 세트를 추가한 시각(ms)
+  var sessionAccumMs = 0;      // 세트 사이 텀이 SESSION_GAP_MS 이내였던 구간만 누적한 소요시간(ms)
   var currentQE = null;
   var editingRecordCtx = null; // { day, exIdx } — 저장된 기록을 수정 중일 때만 설정됨
   var editingSetIndex = -1;
@@ -1086,6 +1095,113 @@
   // PR 달성 토스트 문구 — 표현을 바꾸고 싶으면 여기 한 곳만 수정하면 됨
   function prToastMessage(name, oneRM) {
     return '🏆 ' + name + ' 신기록! 예상 1RM ' + Math.round(oneRM) + 'kg';
+  }
+
+  // ---------- [계산] 종목별 정체기(plateau) 판정 ----------
+  // 화면별 실제 호출 위치: [통계] renderProgress() (progress-plateau-badge 표시)
+  //
+  // 판정 기준(아래 두 조건을 모두 만족해야 "정체"로 본다):
+  //   1) 마지막 1RM 갱신 이후 같은 종목을 최소 PLATEAU_MIN_SESSIONS_SINCE_PR회 더 수행했는데도 갱신이 없었음
+  //      — 주 1회처럼 드물게 하는 종목을 달력 일수만으로 성급하게 "정체"라 부르지 않기 위한 조건.
+  //        즉 실제로 그만큼 "시도"를 했는데도 늘지 않았을 때만 정체로 본다(수행 빈도 반영).
+  //   2) 마지막 1RM 갱신 이후 최소 PLATEAU_MIN_DAYS_SINCE_PR일 이상 지났음
+  //      — 며칠 새 세션을 몰아서 했다는 이유만으로 정체라 부르지 않기 위한 최소 대기 기간.
+  // 값 선정 근거: 3회는 "우연히 그날 컨디션이 안 좋았다"로 보기엔 충분히 반복된 횟수이고,
+  // 14일은 일반적인 근력 운동 단위 루틴(주 1~3회 수행 기준)에서 최소 2주 정도는 지나야
+  // "정체"라고 부를 만하다고 보는 통상적인 기준을 참고했다. 두 조건을 동시에 요구함으로써
+  // 자주 하는 종목과 가끔 하는 종목 모두에 대해 성급한 판정을 피한다.
+  // 전체 수행 기록이 PLATEAU_MIN_TOTAL_SESSIONS회 미만인 종목은 애초에 판정 대상에서 제외한다.
+  var PLATEAU_MIN_TOTAL_SESSIONS = 4;
+  var PLATEAU_MIN_SESSIONS_SINCE_PR = 3;
+  var PLATEAU_MIN_DAYS_SINCE_PR = 14;
+
+  // 'YYYY-MM-DD' 문자열 기준 오늘로부터 며칠 전인지(로컬 타임존 기준, UTC 파싱으로 인한 하루 오차 방지)
+  function daysSinceDateStr(dateStr) {
+    var p = dateStr.split('-').map(Number);
+    var d = new Date(p[0], p[1] - 1, p[2]);
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((today - d) / 86400000);
+  }
+  // 종목의 날짜별 최고 1RM 이력(오름차순). 하루에 여러 세트가 있으면 그날의 최고값 하나만 사용.
+  function exerciseOneRMHistory(name) {
+    var byDate = {};
+    data.days.forEach(function (day) {
+      day.exercises.forEach(function (ex) {
+        if (ex.name !== name) return;
+        var best = 0;
+        ex.sets.forEach(function (s) { best = Math.max(best, estOneRM(s)); });
+        if (best > 0) byDate[day.date] = Math.max(byDate[day.date] || 0, best);
+      });
+    });
+    return Object.keys(byDate).sort().map(function (d) { return { date: d, oneRM: byDate[d] }; });
+  }
+  // 정체 상태가 아니면 null, 정체면 { sessionsSincePR, daysSincePR, bestOneRM }를 반환
+  function detectPlateau(name) {
+    var history = exerciseOneRMHistory(name);
+    if (history.length < PLATEAU_MIN_TOTAL_SESSIONS) return null;
+
+    var bestSoFar = 0, lastPRIdx = 0;
+    history.forEach(function (h, i) {
+      if (h.oneRM > bestSoFar) { bestSoFar = h.oneRM; lastPRIdx = i; }
+    });
+    var sessionsSincePR = history.length - 1 - lastPRIdx;
+    if (sessionsSincePR < PLATEAU_MIN_SESSIONS_SINCE_PR) return null;
+
+    var daysSincePR = daysSinceDateStr(history[lastPRIdx].date);
+    if (daysSincePR < PLATEAU_MIN_DAYS_SINCE_PR) return null;
+
+    return { sessionsSincePR: sessionsSincePR, daysSincePR: daysSincePR, bestOneRM: bestSoFar };
+  }
+
+  // ---------- [계산] 운동 세션 소요시간 ----------
+  // 화면별 실제 호출 위치:
+  //   - 세트 추가 시 활동 기록:        [입력] qe-add-set / qe-repeat-same 클릭 핸들러 (recordSetActivity 호출)
+  //   - 저장(commit) 시 하루 기록에 반영: [저장] save-entry-btn 클릭 핸들러 (commitSessionDuration 호출)
+  //   - 로그 화면 상단 "진행 중" 표시:  [입력] renderProteinToday 부근 (liveSessionMinutes 호출) — 실제로는 updateTodayVolume 근처에서 호출
+  //   - 캘린더 상세 소요시간:          [조회] buildDayCard()
+  //   - 주간요약 총 운동시간:          [통계] renderWeeklySummary()
+  //
+  // 세트 사이 텀이 SESSION_GAP_MS(기본 20분)를 넘으면 그 텀은 소요시간에 포함하지 않는다.
+  // 예: 앱을 며칠 뒤 다시 켜서 같은 날짜에 세트를 추가해도, 그 사이 공백은 자동으로 제외된다.
+  // 20분을 기준으로 잡은 이유: 세트 간 휴식은 보통 1~5분, 종목을 바꾸거나 슈퍼셋을 구성해도
+  // 10~15분을 넘기는 경우는 드물기 때문에, 이를 넘는 공백은 "쉬는 중"이 아니라 "운동을 중단했다가
+  // 다시 시작"으로 보는 것이 합리적이다. 세션 전체 누적 시간에는 6시간이라는 절대 상한을 별도로 둬서,
+  // 혹시 있을 다른 이상 케이스에도 값이 비현실적으로 커지지 않도록 이중으로 방어한다.
+  var SESSION_GAP_MS = 20 * 60 * 1000;
+  var SESSION_MAX_ACCUM_MS = 6 * 60 * 60 * 1000;
+
+  // 저장된 기록을 수정하는 중(editingRecordCtx)에는 호출하지 않는다 — 그건 과거 기록을 고치는
+  // 것이지 "지금 운동 중"이 아니므로 세션 시간에 반영되면 안 된다. 호출부에서 그 가드를 건다.
+  function recordSetActivity() {
+    var now = Date.now();
+    if (sessionLastAt && (now - sessionLastAt) <= SESSION_GAP_MS) {
+      sessionAccumMs = Math.min(SESSION_MAX_ACCUM_MS, sessionAccumMs + (now - sessionLastAt));
+    }
+    if (!sessionStartAt) sessionStartAt = now;
+    sessionLastAt = now;
+  }
+  // 지금 이 순간 기준 "진행 중" 소요 분(로그 화면 상단용). 활동이 없으면 0.
+  function liveSessionMinutes() {
+    if (!sessionStartAt) return 0;
+    var now = Date.now();
+    var extra = (sessionLastAt && (now - sessionLastAt) <= SESSION_GAP_MS) ? (now - sessionLastAt) : 0;
+    return Math.round(Math.min(SESSION_MAX_ACCUM_MS, sessionAccumMs + extra) / 60000);
+  }
+  // 저장(commit) 시점에 이번 세션의 소요시간을 날짜 기록에 반영하고, 세션 상태를 초기화한다.
+  function commitSessionDuration(day) {
+    if (!sessionStartAt) return; // 이번에 새로 추가한 세트가 없으면(예: 루틴만 불러와 바로 저장) 반영할 시간이 없음
+    var minutes = Math.round(sessionAccumMs / 60000);
+    day.durationMin = Math.min(1440, (day.durationMin || 0) + minutes);
+    day.startedAt = day.startedAt || sessionStartAt;
+    day.endedAt = sessionLastAt;
+    sessionStartAt = null; sessionLastAt = null; sessionAccumMs = 0;
+  }
+  function fmtDuration(min) {
+    if (!min || min <= 0) return '';
+    if (min < 60) return min + '분';
+    var h = Math.floor(min / 60), m = min % 60;
+    return h + '시간' + (m ? ' ' + m + '분' : '');
   }
 
   // 세트 한 줄 표기
@@ -1262,6 +1378,9 @@
     data.days = Array.isArray(obj.days) ? obj.days.map(function (d) {
       return {
         date: d.date,
+        durationMin: (isFinite(Number(d.durationMin)) && Number(d.durationMin) > 0) ? Math.min(1440, Math.round(Number(d.durationMin))) : 0,
+        startedAt: Number(d.startedAt) > 0 ? Number(d.startedAt) : 0,
+        endedAt: Number(d.endedAt) > 0 ? Number(d.endedAt) : 0,
         exercises: (d.exercises || []).map(function (ex) {
           return {
             name: ex.name,
@@ -1343,7 +1462,10 @@
   // 저장 전 임시 기록 보관 — 앱을 닫아도 유지됨
   function saveDraft() {
     try {
-      var payload = { date: $('entry-date').value, staging: staging };
+      var payload = {
+        date: $('entry-date').value, staging: staging,
+        session: { startAt: sessionStartAt, lastAt: sessionLastAt, accumMs: sessionAccumMs }
+      };
       if (!staging.length) { store.set(DRAFT_KEY, ''); return; }
       store.set(DRAFT_KEY, JSON.stringify(payload));
     } catch (e) {}
@@ -1361,6 +1483,11 @@
         };
       });
       if (d.date) $('entry-date').value = d.date;
+      if (d.session && typeof d.session === 'object') {
+        sessionStartAt = Number(d.session.startAt) > 0 ? Number(d.session.startAt) : null;
+        sessionLastAt = Number(d.session.lastAt) > 0 ? Number(d.session.lastAt) : null;
+        sessionAccumMs = Number(d.session.accumMs) > 0 ? Math.min(SESSION_MAX_ACCUM_MS, Number(d.session.accumMs)) : 0;
+      }
     } catch (e) {}
   }
   function clearDraft() { try { store.set(DRAFT_KEY, ''); } catch (e) {} }
@@ -1965,6 +2092,7 @@
     if (Array.isArray(src.tags)) copy.tags = src.tags.slice();
     currentQE.sets.push(copy);
     commitStaging();
+    if (!editingRecordCtx) recordSetActivity();
     renderQESetList();
     renderStaging();
     saveDraft();
@@ -2160,6 +2288,7 @@
     setRpe(null);
     setTags([]);
     commitStaging();
+    if (!editingRecordCtx) recordSetActivity();
     renderQESetList();
     renderStaging();
     saveDraft();
@@ -2319,6 +2448,26 @@
     if (saved) saved.exercises.forEach(function (ex) { vol += setVolume(ex.sets); });
     staging.forEach(function (s) { vol += setVolume(s.sets); });
     $('today-volume').textContent = fmtVol(vol);
+    updateTodayDuration();
+  }
+  // 기능1 - 로그 화면 상단 소요시간 캡션("OO분 진행 중" / "총 OO분")
+  function updateTodayDuration() {
+    var dateVal = $('entry-date').value;
+    var saved = data.days.find(function (d) { return d.date === dateVal; });
+    var savedMin = saved ? (saved.durationMin || 0) : 0;
+    var isToday = dateVal === fmtDate(new Date());
+    var liveActive = isToday && !!sessionStartAt;
+    var cap = $('duration-caption');
+    if (liveActive) {
+      var liveMin = liveSessionMinutes();
+      cap.textContent = '⏱ 오늘 ' + (fmtDuration(savedMin + liveMin) || '1분 미만') + ' 진행 중';
+      cap.style.display = '';
+    } else if (saved && saved.startedAt > 0) {
+      cap.textContent = '⏱ 총 ' + (fmtDuration(savedMin) || '1분 미만');
+      cap.style.display = '';
+    } else {
+      cap.style.display = 'none';
+    }
   }
 
   // ---------- [단백질] '오늘 단백질' 섹션 렌더 (entry-date 기준) ----------
@@ -2765,6 +2914,7 @@
       day.exercises.push({ name: item.name, category: item.category, sets: cleaned });
     });
     day.exercises = mergeDupExercises(day.exercises);
+    commitSessionDuration(day);
 
     await persist();
     clearDraft();
@@ -2809,7 +2959,8 @@
     applyHistoryOpen();
   }
 
-  function buildDayCard(day) {
+  function buildDayCard(day, opts) {
+    var showDuration = !!(opts && opts.showDuration);
     var card = document.createElement('div');
     card.className = 'wt-card';
     card.style.marginBottom = '10px';
@@ -2844,6 +2995,13 @@
 
     header.appendChild(dateP); header.appendChild(rightWrap);
     card.appendChild(header);
+
+    if (showDuration && day.startedAt > 0) {
+      var durP = document.createElement('p');
+      durP.style.cssText = 'font-size:12px;color:var(--wt-text-muted);margin:-4px 0 10px;';
+      durP.textContent = '⏱ 총 소요시간 ' + (fmtDuration(day.durationMin) || '1분 미만');
+      card.appendChild(durP);
+    }
 
     var list = document.createElement('div');
     list.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
@@ -3014,7 +3172,7 @@
         fmtDisplayDate(calSelected) + '에는 기록이 없습니다.</p>';
       return;
     }
-    el.appendChild(buildDayCard(day));
+    el.appendChild(buildDayCard(day, { showDuration: true }));
   }
 
   $('cal-prev').addEventListener('click', function () {
@@ -3034,8 +3192,10 @@
     var endIso = fmtDate(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6));
 
     var weekDays = data.days.filter(function (d) { return d.date >= startIso && d.date <= endIso; });
-    var totalVol = 0, totalSets = 0, byCat = {};
+    var totalVol = 0, totalSets = 0, byCat = {}, totalDurMin = 0, hadAnySession = false;
     weekDays.forEach(function (day) {
+      totalDurMin += day.durationMin || 0;
+      if (day.startedAt > 0) hadAnySession = true;
       day.exercises.forEach(function (ex) {
         var v = setVolume(ex.sets);
         totalVol += v;
@@ -3061,6 +3221,13 @@
     }
     $('wk-volume').textContent = totalVol ? fmtVol(totalVol) : '-';
     $('wk-sets').textContent = totalSets ? totalSets + '세트' : '-';
+    var durCap = $('wk-duration');
+    if (hadAnySession) {
+      durCap.textContent = '⏱ 이번 주 총 운동시간 ' + (fmtDuration(totalDurMin) || '1분 미만');
+      durCap.style.display = '';
+    } else {
+      durCap.style.display = 'none';
+    }
 
     var wrap = $('wk-balance');
     if (!totalVol) {
@@ -3365,6 +3532,16 @@
       oneRMCaption.style.display = bestRM > 0 ? '' : 'none';
     } else {
       oneRMCaption.style.display = 'none';
+    }
+
+    // 정체기(plateau) 안내 — PR 배지(금색·트로피)와 겹치지 않게 차분한 톤으로 구분
+    var plateauBadge = $('progress-plateau-badge');
+    var plateau = !cardio ? detectPlateau(name) : null;
+    if (plateau) {
+      plateauBadge.textContent = '⏸ ' + plateau.daysSincePR + '일째 정체 · 최근 ' + plateau.sessionsSincePR + '회 동안 1RM 갱신 없음';
+      plateauBadge.style.display = 'inline-block';
+    } else {
+      plateauBadge.style.display = 'none';
     }
 
     var labelFn;
