@@ -2221,7 +2221,7 @@
     list.innerHTML = '';
     var dateVal = $('entry-date').value;
 
-    staging.forEach(function (item) {
+    staging.forEach(function (item, i) {
       var m = meta(item.category);
       var row = document.createElement('div');
       row.className = 'wt-row-card';
@@ -2264,6 +2264,32 @@
         openQuickEntry(item.category, item.name);
       });
 
+      var ordWrap = document.createElement('div');
+      ordWrap.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;';
+      var up = document.createElement('button');
+      up.type = 'button'; up.className = 'wt-rm-ord'; up.setAttribute('aria-label', item.name + ' 위로 이동');
+      up.innerHTML = svg('chevron-up', 14);
+      up.disabled = i === 0;
+      up.addEventListener('click', function () {
+        var t = staging[i - 1];
+        staging[i - 1] = staging[i];
+        staging[i] = t;
+        renderStaging();
+        saveDraft();
+      });
+      var down = document.createElement('button');
+      down.type = 'button'; down.className = 'wt-rm-ord'; down.setAttribute('aria-label', item.name + ' 아래로 이동');
+      down.innerHTML = svg('chevron-down', 14);
+      down.disabled = i === staging.length - 1;
+      down.addEventListener('click', function () {
+        var t = staging[i + 1];
+        staging[i + 1] = staging[i];
+        staging[i] = t;
+        renderStaging();
+        saveDraft();
+      });
+      ordWrap.appendChild(up); ordWrap.appendChild(down);
+
       var del = document.createElement('button');
       del.className = 'wt-icon-btn-sm danger';
       del.setAttribute('aria-label', item.name + ' 삭제');
@@ -2275,7 +2301,7 @@
         saveDraft();
       });
 
-      row.appendChild(icon); row.appendChild(mid); row.appendChild(del);
+      row.appendChild(icon); row.appendChild(mid); row.appendChild(ordWrap); row.appendChild(del);
       list.appendChild(row);
     });
 
