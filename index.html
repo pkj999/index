@@ -1146,12 +1146,17 @@
     return Math.round(Math.min(SESSION_MAX_ACCUM_MS, sessionAccumMs + extra) / 60000);
   }
   // 저장(commit) 시점에 이번 세션의 소요시간을 날짜 기록에 반영하고, 세션 상태를 초기화한다.
+  // 마지막 세트 추가 이후 ~ 저장 버튼을 누른 시점까지도 소요시간에 포함한다(liveSessionMinutes와 동일한 방식) —
+  // 그렇지 않으면 마지막 세트를 기록하고 정리하다 저장하는 사이의 시간이 누락되어 실제보다 적게 잡힌다.
   function commitSessionDuration(day) {
     if (!sessionStartAt) return; // 이번에 새로 추가한 세트가 없으면(예: 루틴만 불러와 바로 저장) 반영할 시간이 없음
-    var minutes = Math.round(sessionAccumMs / 60000);
+    var now = Date.now();
+    var extra = (sessionLastAt && (now - sessionLastAt) <= SESSION_GAP_MS) ? (now - sessionLastAt) : 0;
+    var totalMs = Math.min(SESSION_MAX_ACCUM_MS, sessionAccumMs + extra);
+    var minutes = Math.round(totalMs / 60000);
     day.durationMin = Math.min(1440, (day.durationMin || 0) + minutes);
     day.startedAt = day.startedAt || sessionStartAt;
-    day.endedAt = sessionLastAt;
+    day.endedAt = now;
     sessionStartAt = null; sessionLastAt = null; sessionAccumMs = 0;
   }
   function fmtDuration(min) {
