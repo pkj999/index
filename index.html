@@ -127,8 +127,6 @@
   #wt-root .wt-cal-cell.empty { visibility: hidden; }
   #wt-root .wt-cal-cell.today { background: var(--wt-accent-soft); font-weight: 700; }
   #wt-root .wt-cal-cell.selected { outline: 2px solid var(--wt-accent); }
-  #wt-root .wt-cal-dots { display: flex; gap: 2px; height: 5px; }
-  #wt-root .wt-cal-dot { width: 5px; height: 5px; border-radius: 50%; }
 
   #wt-root .wt-switch { position: relative; width: 42px; height: 24px; border-radius: 8px; background: var(--wt-bg); border: 1.5px solid var(--wt-border-strong); cursor: pointer; flex-shrink: 0; padding: 0; }
   #wt-root .wt-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--wt-text-muted); transition: left .18s, background .18s; }
@@ -2752,6 +2750,21 @@
   }
 
   // ---------- [조회] 캘린더 ----------
+  // 그 날 가장 많은 세트를 채운 부위 — 캘린더 칸 배경 톤으로 "메인 부위"만 표시하기 위함
+  function dominantCategory(day) {
+    var counts = {};
+    day.exercises.forEach(function (ex) {
+      var n = workSets(ex.sets).length;
+      if (!n) return;
+      counts[ex.category] = (counts[ex.category] || 0) + n;
+    });
+    var best = null, bestN = 0;
+    Object.keys(counts).forEach(function (c) {
+      if (counts[c] > bestN) { bestN = counts[c]; best = c; }
+    });
+    return best;
+  }
+
   function renderCalendar() {
     var y = calCursor.getFullYear(), mo = calCursor.getMonth();
     $('cal-title').textContent = y + '년 ' + (mo + 1) + '월';
@@ -2784,15 +2797,11 @@
         var day = data.days.find(function (d) { return d.date === iso; });
         var cell = document.createElement('button');
         cell.className = 'wt-cal-cell' + (iso === todayIso ? ' today' : '') + (iso === calSelected ? ' selected' : '');
-        var dots = '';
-        if (day) {
-          var cats = [];
-          day.exercises.forEach(function (ex) { if (cats.indexOf(ex.category) === -1) cats.push(ex.category); });
-          dots = cats.slice(0, 4).map(function (c) {
-            return '<span class="wt-cal-dot" style="background:' + meta(c).color + ';"></span>';
-          }).join('');
+        if (day && iso !== todayIso) {
+          var dom = dominantCategory(day);
+          if (dom) cell.style.background = meta(dom).color + '22';
         }
-        cell.innerHTML = '<span>' + n + '</span><span class="wt-cal-dots">' + dots + '</span>';
+        cell.innerHTML = '<span>' + n + '</span>';
         cell.addEventListener('click', function () {
           calSelected = (calSelected === iso) ? null : iso;
           renderCalendar();
