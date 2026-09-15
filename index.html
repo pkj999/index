@@ -2835,7 +2835,9 @@
       grid.appendChild(flag);
     }
 
-    $('cal-legend').innerHTML = CATEGORIES.filter(function (c) { return c !== '기타'; }).map(function (c) {
+    var usedCats = {};
+    data.days.forEach(function (d) { d.exercises.forEach(function (ex) { usedCats[ex.category] = true; }); });
+    $('cal-legend').innerHTML = CATEGORIES.filter(function (c) { return c !== '기타' && usedCats[c]; }).map(function (c) {
       return '<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--wt-text-muted);font-weight:600;">' +
         '<span style="width:7px;height:7px;border-radius:50%;background:' + meta(c).color + ';"></span>' + c + '</span>';
     }).join('');
