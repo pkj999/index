@@ -554,10 +554,10 @@
         <p style="font-size: 13px; font-weight: 700; margin: 0; color: var(--wt-text);">부위별 볼륨 추이</p>
         <p id="total-vol-caption" style="font-size: 11px; color: var(--wt-text-muted); margin: 0;"></p>
       </div>
+      <select id="vol-cat-select" class="wt-input" style="width: 100%; margin-bottom: 10px; display: none;"></select>
       <div style="position: relative; height: 170px;">
         <canvas id="total-canvas"></canvas>
       </div>
-      <div id="total-vol-legend" style="display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 10px;"></div>
       <p id="total-empty" style="display: none; font-size: 12px; color: var(--wt-text-muted); text-align: center; margin: 0;">기록이 쌓이면 표시됩니다.</p>
     </div>
 
@@ -3041,92 +3041,6 @@
     chartAnimId[canvasId] = requestAnimationFrame(step);
   }
 
-  // 부위별 볼륨 추이 — 부위마다 색이 다른 선으로 겹쳐 그려서, 부위 간 볼륨 차이(예: 하체 vs 어깨)에
-  // 흔들리지 않고 "그 부위 자체의 추세"를 볼 수 있게 함
-  function drawMultiLineChart(canvasId, series, valueKey, labelFn) {
-    var canvas = $(canvasId);
-    if (!canvas) return;
-    var parent = canvas.parentElement;
-    var box = parent.getBoundingClientRect();
-    var cw = box.width || parent.offsetWidth || parent.clientWidth || 0;
-    var ch = box.height || parent.offsetHeight || parent.clientHeight || 0;
-    if (cw < 10 || ch < 10) {
-      var tries = chartRetries[canvasId] || 0;
-      if (tries < 5) {
-        chartRetries[canvasId] = tries + 1;
-        setTimeout(function () { drawMultiLineChart(canvasId, series, valueKey, labelFn); }, 120);
-      }
-      return;
-    }
-    chartRetries[canvasId] = 0;
-    if (chartAnimId[canvasId]) { cancelAnimationFrame(chartAnimId[canvasId]); chartAnimId[canvasId] = null; }
-
-    var rect = { width: cw, height: ch };
-    var ctx = canvas.getContext('2d');
-    var dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!series.length) return;
-
-    var grid = cssVar('--wt-border', '#EDEDF1');
-    var muted = cssVar('--wt-text-muted', '#9797A3');
-
-    var padL = 50, padR = 12, padT = 12, padB = 24;
-    var w = rect.width - padL - padR, h = rect.height - padT - padB;
-    if (w <= 0 || h <= 0) return;
-
-    var allDates = [], allVals = [];
-    series.forEach(function (s) {
-      s.points.forEach(function (p) { allDates.push(p.date); allVals.push(p[valueKey]); });
-    });
-    var minDate = allDates.reduce(function (a, b) { return a < b ? a : b; });
-    var maxDate = allDates.reduce(function (a, b) { return a > b ? a : b; });
-    var minV = Math.min.apply(null, allVals), maxV = Math.max.apply(null, allVals);
-    if (minV === maxV) { minV = Math.max(0, minV - 5); maxV = maxV + 5; }
-    var range = (maxV - minV) || 1;
-
-    function dNum(d) { return new Date(d + 'T00:00:00').getTime(); }
-    var minT = dNum(minDate), maxT = dNum(maxDate);
-    var span = (maxT - minT) || 1;
-    function xAt(d) { return padL + (maxT === minT ? w / 2 : (w * (dNum(d) - minT) / span)); }
-    function yAt(v) { return padT + h - ((v - minV) / range) * h; }
-
-    ctx.strokeStyle = grid; ctx.lineWidth = 1;
-    for (var g = 0; g <= 3; g++) {
-      var gy = padT + (h * g / 3);
-      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + w, gy); ctx.stroke();
-    }
-    ctx.fillStyle = muted;
-    ctx.font = '11px -apple-system, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(labelFn(maxV), padL - 6, padT + 4);
-    ctx.fillText(labelFn(minV), padL - 6, padT + h);
-    ctx.fillStyle = muted; ctx.textAlign = 'center';
-    ctx.fillText(fmtDisplayDate(minDate), xAt(minDate), padT + h + 16);
-    if (maxDate !== minDate) ctx.fillText(fmtDisplayDate(maxDate), xAt(maxDate), padT + h + 16);
-
-    series.forEach(function (s) {
-      var color = meta(s.cat).color;
-      ctx.strokeStyle = color; ctx.lineWidth = 2.5;
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      ctx.beginPath();
-      s.points.forEach(function (p, i) {
-        var x = xAt(p.date), y = yAt(p[valueKey]);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-      s.points.forEach(function (p) {
-        var x = xAt(p.date), y = yAt(p[valueKey]);
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
-      });
-    });
-  }
-
   // 부위별(카테고리별)로 세션 날짜에 볼륨을 모아, 최근 기록 있는 세션 최대 10회씩만 남김
   function categoryVolumeSeries() {
     var byCatDay = {};
@@ -3150,28 +3064,37 @@
     return series;
   }
 
+  // 부위별 볼륨 추이 — 여러 부위를 한 그래프에 겹쳐 그리면 부위 간 볼륨 차이(하체 vs 어깨)
+  // 때문에 뒤섞여 읽기 어려워지므로, 부위 하나를 선택해서 그 부위만 보는 방식으로 유지
+  var volCatSelected = null;
   function renderTotalVolumeChart() {
     var series = categoryVolumeSeries();
     var empty = $('total-empty');
     var canvas = $('total-canvas');
-    var legend = $('total-vol-legend');
+    var selectEl = $('vol-cat-select');
     if (!series.length) {
       canvas.parentElement.style.display = 'none';
+      selectEl.style.display = 'none';
       empty.style.display = 'block';
       $('total-vol-caption').textContent = '';
-      legend.innerHTML = '';
       return;
     }
+    var cats = series.map(function (s) { return s.cat; });
+    if (!volCatSelected || cats.indexOf(volCatSelected) === -1) volCatSelected = cats[0];
+    selectEl.innerHTML = cats.map(function (c) {
+      return '<option value="' + escapeHtml(c) + '"' + (c === volCatSelected ? ' selected' : '') + '>' + escapeHtml(c) + '</option>';
+    }).join('');
+    selectEl.style.display = '';
     canvas.parentElement.style.display = '';
     empty.style.display = 'none';
-    $('total-vol-caption').textContent = '부위별 최근 추이';
-    drawMultiLineChart('total-canvas', series, 'volume', fmtVol);
-    legend.innerHTML = series.map(function (s) {
-      return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--wt-text-muted);">' +
-        '<span style="width:8px;height:8px;border-radius:50%;background:' + meta(s.cat).color + ';display:inline-block;flex-shrink:0;"></span>' +
-        escapeHtml(s.cat) + '</span>';
-    }).join('');
+    var s = series.find(function (x) { return x.cat === volCatSelected; });
+    $('total-vol-caption').textContent = '최근 ' + s.points.length + '회';
+    drawLineChart('total-canvas', s.points, 'volume', fmtVol);
   }
+  $('vol-cat-select').addEventListener('change', function () {
+    volCatSelected = this.value;
+    renderTotalVolumeChart();
+  });
 
   // 최근 14일 중 기록이 있는 날짜만 뽑아 차트로 표시 (기존 [통계] 볼륨 추이와 동일한 방식)
   function proteinChartPoints() {
