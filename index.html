@@ -324,8 +324,8 @@
     <div style="display: flex; gap: 8px; margin-bottom: 14px;">
       <input type="date" id="entry-date" class="wt-input" style="flex: 1; min-width: 0;" />
       <div class="wt-volume-badge">
-        <span style="font-size: 10px; opacity: 0.85;">오늘 볼륨</span>
-        <span id="today-volume" style="font-size: 14px; font-weight: 700;">0kg</span>
+        <span style="font-size: 10px; opacity: 0.85;">오늘 세트</span>
+        <span id="today-volume" style="font-size: 14px; font-weight: 700;">0세트</span>
       </div>
     </div>
     <p id="duration-caption" style="display: none; font-size: 12px; font-weight: 600; color: var(--wt-text-muted); margin: -8px 0 14px;"></p>
@@ -551,12 +551,13 @@
 
     <div class="wt-card" style="margin-bottom: 12px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-        <p style="font-size: 13px; font-weight: 700; margin: 0; color: var(--wt-text);">전체 볼륨 추이</p>
+        <p style="font-size: 13px; font-weight: 700; margin: 0; color: var(--wt-text);">부위별 볼륨 추이</p>
         <p id="total-vol-caption" style="font-size: 11px; color: var(--wt-text-muted); margin: 0;"></p>
       </div>
       <div style="position: relative; height: 170px;">
         <canvas id="total-canvas"></canvas>
       </div>
+      <div id="total-vol-legend" style="display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 10px;"></div>
       <p id="total-empty" style="display: none; font-size: 12px; color: var(--wt-text-muted); text-align: center; margin: 0;">기록이 쌓이면 표시됩니다.</p>
     </div>
 
@@ -573,9 +574,10 @@
       <p id="progress-1rm-caption" style="display: none; font-size: 11px; color: var(--wt-text-muted); margin: -4px 0 10px;"></p>
       <p id="progress-plateau-badge" class="wt-plateau-badge" style="display: none;"></p>
       <div class="wt-card" style="padding: 1rem;">
-        <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+        <div style="display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;">
           <button id="chart-mode-weight" class="wt-seg-btn active">최고 무게</button>
           <button id="chart-mode-volume" class="wt-seg-btn">볼륨</button>
+          <button id="chart-mode-sets" class="wt-seg-btn">세트</button>
           <button id="chart-mode-onerm" class="wt-seg-btn">1RM</button>
         </div>
         <div style="position: relative; height: 190px;">
@@ -1640,10 +1642,14 @@
     });
   }
 
+  var EX_PICKER_LIMIT = 6;
+  var exPickerExpanded = false;
+  var exPickerLastCat = null;
   function renderExercisePicker() {
     var picker = $('exercise-picker');
     if (!selectedCategory) { picker.style.display = 'none'; return; }
     picker.style.display = '';
+    if (selectedCategory !== exPickerLastCat) { exPickerExpanded = false; exPickerLastCat = selectedCategory; }
     $('exercise-picker-label').textContent = selectedCategory + ' 운동';
     $('edit-hint').style.display = editMode ? '' : 'none';
     var editBtn = $('edit-exercises-btn');
@@ -1666,6 +1672,15 @@
         return d !== 0 ? d : 0;
       });
       if (q) listed = listed.filter(function (n) { return normName(n).indexOf(q) !== -1; });
+    }
+    // 검색 중이 아닐 때만 기본 노출 개수를 제한 — 나머지는 "더보기"로 펼치거나 검색으로 찾음
+    var hiddenCount = 0;
+    var showCollapse = false;
+    if (!editMode && !q && !exPickerExpanded && listed.length > EX_PICKER_LIMIT) {
+      hiddenCount = listed.length - EX_PICKER_LIMIT;
+      listed = listed.slice(0, EX_PICKER_LIMIT);
+    } else if (!editMode && !q && exPickerExpanded && listed.length > EX_PICKER_LIMIT) {
+      showCollapse = true;
     }
     listed.forEach(function (name) {
       var btn = document.createElement('button');
@@ -1691,6 +1706,28 @@
       });
       wrap.appendChild(btn);
     });
+
+    if (hiddenCount > 0) {
+      var moreBtn = document.createElement('button');
+      moreBtn.className = 'wt-chip wt-chip-new';
+      moreBtn.type = 'button';
+      moreBtn.textContent = '더보기 (' + hiddenCount + ')';
+      moreBtn.addEventListener('click', function () {
+        exPickerExpanded = true;
+        renderExercisePicker();
+      });
+      wrap.appendChild(moreBtn);
+    } else if (showCollapse) {
+      var lessBtn = document.createElement('button');
+      lessBtn.className = 'wt-chip wt-chip-new';
+      lessBtn.type = 'button';
+      lessBtn.textContent = '접기';
+      lessBtn.addEventListener('click', function () {
+        exPickerExpanded = false;
+        renderExercisePicker();
+      });
+      wrap.appendChild(lessBtn);
+    }
 
     if (!editMode && exSearch.trim()) {
       var typed = exSearch.trim();
@@ -2413,10 +2450,10 @@
   function updateTodayVolume() {
     var dateVal = $('entry-date').value;
     var saved = data.days.find(function (d) { return d.date === dateVal; });
-    var vol = 0;
-    if (saved) saved.exercises.forEach(function (ex) { vol += setVolume(ex.sets); });
-    staging.forEach(function (s) { vol += setVolume(s.sets); });
-    $('today-volume').textContent = fmtVol(vol);
+    var sets = 0;
+    if (saved) saved.exercises.forEach(function (ex) { sets += workSets(ex.sets).length; });
+    staging.forEach(function (s) { sets += workSets(s.sets).length; });
+    $('today-volume').textContent = sets + '세트';
     updateTodayDuration();
   }
   // 기능1 - 로그 화면 상단 소요시간 캡션("OO분 진행 중" / "총 OO분")
@@ -3004,30 +3041,136 @@
     chartAnimId[canvasId] = requestAnimationFrame(step);
   }
 
-  function totalVolumePoints() {
-    return data.days.slice()
-      .map(function (day) {
-        return { date: day.date, volume: day.exercises.reduce(function (s, ex) { return s + setVolume(ex.sets); }, 0) };
-      })
-      .filter(function (p) { return p.volume > 0; })
-      .sort(function (a, b) { return a.date.localeCompare(b.date); })
-      .slice(-14);
+  // 부위별 볼륨 추이 — 부위마다 색이 다른 선으로 겹쳐 그려서, 부위 간 볼륨 차이(예: 하체 vs 어깨)에
+  // 흔들리지 않고 "그 부위 자체의 추세"를 볼 수 있게 함
+  function drawMultiLineChart(canvasId, series, valueKey, labelFn) {
+    var canvas = $(canvasId);
+    if (!canvas) return;
+    var parent = canvas.parentElement;
+    var box = parent.getBoundingClientRect();
+    var cw = box.width || parent.offsetWidth || parent.clientWidth || 0;
+    var ch = box.height || parent.offsetHeight || parent.clientHeight || 0;
+    if (cw < 10 || ch < 10) {
+      var tries = chartRetries[canvasId] || 0;
+      if (tries < 5) {
+        chartRetries[canvasId] = tries + 1;
+        setTimeout(function () { drawMultiLineChart(canvasId, series, valueKey, labelFn); }, 120);
+      }
+      return;
+    }
+    chartRetries[canvasId] = 0;
+    if (chartAnimId[canvasId]) { cancelAnimationFrame(chartAnimId[canvasId]); chartAnimId[canvasId] = null; }
+
+    var rect = { width: cw, height: ch };
+    var ctx = canvas.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    if (!series.length) return;
+
+    var grid = cssVar('--wt-border', '#EDEDF1');
+    var muted = cssVar('--wt-text-muted', '#9797A3');
+
+    var padL = 50, padR = 12, padT = 12, padB = 24;
+    var w = rect.width - padL - padR, h = rect.height - padT - padB;
+    if (w <= 0 || h <= 0) return;
+
+    var allDates = [], allVals = [];
+    series.forEach(function (s) {
+      s.points.forEach(function (p) { allDates.push(p.date); allVals.push(p[valueKey]); });
+    });
+    var minDate = allDates.reduce(function (a, b) { return a < b ? a : b; });
+    var maxDate = allDates.reduce(function (a, b) { return a > b ? a : b; });
+    var minV = Math.min.apply(null, allVals), maxV = Math.max.apply(null, allVals);
+    if (minV === maxV) { minV = Math.max(0, minV - 5); maxV = maxV + 5; }
+    var range = (maxV - minV) || 1;
+
+    function dNum(d) { return new Date(d + 'T00:00:00').getTime(); }
+    var minT = dNum(minDate), maxT = dNum(maxDate);
+    var span = (maxT - minT) || 1;
+    function xAt(d) { return padL + (maxT === minT ? w / 2 : (w * (dNum(d) - minT) / span)); }
+    function yAt(v) { return padT + h - ((v - minV) / range) * h; }
+
+    ctx.strokeStyle = grid; ctx.lineWidth = 1;
+    for (var g = 0; g <= 3; g++) {
+      var gy = padT + (h * g / 3);
+      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + w, gy); ctx.stroke();
+    }
+    ctx.fillStyle = muted;
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(labelFn(maxV), padL - 6, padT + 4);
+    ctx.fillText(labelFn(minV), padL - 6, padT + h);
+    ctx.fillStyle = muted; ctx.textAlign = 'center';
+    ctx.fillText(fmtDisplayDate(minDate), xAt(minDate), padT + h + 16);
+    if (maxDate !== minDate) ctx.fillText(fmtDisplayDate(maxDate), xAt(maxDate), padT + h + 16);
+
+    series.forEach(function (s) {
+      var color = meta(s.cat).color;
+      ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath();
+      s.points.forEach(function (p, i) {
+        var x = xAt(p.date), y = yAt(p[valueKey]);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      s.points.forEach(function (p) {
+        var x = xAt(p.date), y = yAt(p[valueKey]);
+        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+      });
+    });
+  }
+
+  // 부위별(카테고리별)로 세션 날짜에 볼륨을 모아, 최근 기록 있는 세션 최대 10회씩만 남김
+  function categoryVolumeSeries() {
+    var byCatDay = {};
+    data.days.forEach(function (day) {
+      var dayByCat = {};
+      day.exercises.forEach(function (ex) {
+        var v = setVolume(ex.sets);
+        if (!v) return;
+        dayByCat[ex.category] = (dayByCat[ex.category] || 0) + v;
+      });
+      Object.keys(dayByCat).forEach(function (cat) {
+        byCatDay[cat] = byCatDay[cat] || [];
+        byCatDay[cat].push({ date: day.date, volume: dayByCat[cat] });
+      });
+    });
+    var series = [];
+    Object.keys(byCatDay).forEach(function (cat) {
+      var pts = byCatDay[cat].sort(function (a, b) { return a.date.localeCompare(b.date); }).slice(-10);
+      if (pts.length >= 2) series.push({ cat: cat, points: pts });
+    });
+    return series;
   }
 
   function renderTotalVolumeChart() {
-    var points = totalVolumePoints();
+    var series = categoryVolumeSeries();
     var empty = $('total-empty');
     var canvas = $('total-canvas');
-    if (points.length < 2) {
+    var legend = $('total-vol-legend');
+    if (!series.length) {
       canvas.parentElement.style.display = 'none';
       empty.style.display = 'block';
       $('total-vol-caption').textContent = '';
+      legend.innerHTML = '';
       return;
     }
     canvas.parentElement.style.display = '';
     empty.style.display = 'none';
-    $('total-vol-caption').textContent = '최근 ' + points.length + '회';
-    drawLineChart('total-canvas', points, 'volume', fmtVol);
+    $('total-vol-caption').textContent = '부위별 최근 추이';
+    drawMultiLineChart('total-canvas', series, 'volume', fmtVol);
+    legend.innerHTML = series.map(function (s) {
+      return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--wt-text-muted);">' +
+        '<span style="width:8px;height:8px;border-radius:50%;background:' + meta(s.cat).color + ';display:inline-block;flex-shrink:0;"></span>' +
+        escapeHtml(s.cat) + '</span>';
+    }).join('');
   }
 
   // 최근 14일 중 기록이 있는 날짜만 뽑아 차트로 표시 (기존 [통계] 볼륨 추이와 동일한 방식)
@@ -3100,9 +3243,9 @@
           var mins = totalMinutes(all);
           var maxInt = all.reduce(function (mx, x) { return Math.max(mx, x.intensity || 0); }, 0);
           var dist = all.reduce(function (sum, x) { return sum + (x.distance || 0); }, 0);
-          return { date: day.date, cardio: true, weight: maxInt, volume: mins, minutes: mins, distance: dist };
+          return { date: day.date, cardio: true, weight: maxInt, volume: mins, minutes: mins, distance: dist, sets: workSets(all).length };
         }
-        return { date: day.date, cardio: false, weight: maxWeight(all), volume: setVolume(all), oneRM: Math.round(Math.max.apply(null, [0].concat(all.map(estOneRM)))) };
+        return { date: day.date, cardio: false, weight: maxWeight(all), volume: setVolume(all), oneRM: Math.round(Math.max.apply(null, [0].concat(all.map(estOneRM)))), sets: workSets(all).length };
       })
       .filter(function (p) { return p && (p.cardio ? p.minutes > 0 : p.weight > 0); });
   }
@@ -3173,6 +3316,7 @@
     var labelFn;
     if (chartMode === 'volume') labelFn = cardio ? function (v) { return Math.round(v) + '분'; } : fmtVol;
     else if (chartMode === 'oneRM') labelFn = function (v) { return Math.round(v) + 'kg'; };
+    else if (chartMode === 'sets') labelFn = function (v) { return v + '세트'; };
     else labelFn = cardio ? function (v) { return '강도 ' + Math.round(v); } : function (v) { return Math.round(v) + 'kg'; };
 
     drawLineChart('progress-canvas', points, chartMode, labelFn);
@@ -3235,6 +3379,7 @@
     chartMode = 'weight';
     this.classList.add('active');
     $('chart-mode-volume').classList.remove('active');
+    $('chart-mode-sets').classList.remove('active');
     $('chart-mode-onerm').classList.remove('active');
     renderProgress();
   });
@@ -3242,6 +3387,15 @@
     chartMode = 'volume';
     this.classList.add('active');
     $('chart-mode-weight').classList.remove('active');
+    $('chart-mode-sets').classList.remove('active');
+    $('chart-mode-onerm').classList.remove('active');
+    renderProgress();
+  });
+  $('chart-mode-sets').addEventListener('click', function () {
+    chartMode = 'sets';
+    this.classList.add('active');
+    $('chart-mode-weight').classList.remove('active');
+    $('chart-mode-volume').classList.remove('active');
     $('chart-mode-onerm').classList.remove('active');
     renderProgress();
   });
@@ -3250,6 +3404,7 @@
     this.classList.add('active');
     $('chart-mode-weight').classList.remove('active');
     $('chart-mode-volume').classList.remove('active');
+    $('chart-mode-sets').classList.remove('active');
     renderProgress();
   });
 
