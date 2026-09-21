@@ -115,6 +115,11 @@ const ICON_PATHS = {
   'link-2': '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/>',
   'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
+  star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+  trash: '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  'undo-2': '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+  'calendar-plus': '<path d="M16 18h6"/><path d="M16 2v3"/><path d="M19 15v6"/><path d="M21 11.5V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.3"/><path d="M3 9h18"/><path d="M8 2v3"/>',
+  quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
 };
 
 function Icon({ name, size = 16, strokeWidth = 2, className = '', style }) {
@@ -130,6 +135,7 @@ function Icon({ name, size = 16, strokeWidth = 2, className = '', style }) {
 const mkIcon = n => p => <Icon name={n} {...p} />;
 const Search = mkIcon('search');
 const Plus = mkIcon('plus');
+const Download = mkIcon('download');
 const X = mkIcon('x');
 const Pencil = mkIcon('pencil');
 const Trash2 = mkIcon('trash-2');
@@ -163,6 +169,11 @@ const SettingsIcon = mkIcon('settings');
 const Link2 = mkIcon('link-2');
 const ArrowLeft = mkIcon('arrow-left');
 const Check = mkIcon('check');
+const Star = mkIcon('star');
+const TrashIcon = mkIcon('trash');
+const Undo2 = mkIcon('undo-2');
+const CalendarPlus = mkIcon('calendar-plus');
+const Quote = mkIcon('quote');
 
 /* ===========================================================
    상수
@@ -172,6 +183,7 @@ const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
 const PATH_QUICK_NOTES = 'data/quick-notes.json';
 const PATH_TODOS = 'data/todos.json';
+const PATH_PHRASES = 'data/phrases.json';
 const GH_API = 'https://api.github.com';
 
 const CATEGORIES = [
@@ -218,6 +230,32 @@ function daysUntil(dateStr) {
   const today = new Date(todayStr() + 'T00:00:00');
   const target = new Date(dateStr + 'T00:00:00');
   return Math.round((target - today) / 86400000);
+}
+
+function downloadICS(title, dateStr) {
+  if (!dateStr) return;
+  const dt = dateStr.replace(/-/g, '');
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const esc = s => String(s || '').replace(/[\\;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//WorkJournal//KO', 'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${uid()}@workjournal`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART;VALUE=DATE:${dt}`,
+    `DTEND;VALUE=DATE:${dt}`,
+    `SUMMARY:${esc(title)}`,
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\r\n');
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(title || '할일').slice(0, 40)}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 /* ===========================================================
@@ -333,6 +371,28 @@ function compressImage(file, maxSize = 1600, quality = 0.72) {
   });
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('파일을 읽지 못했습니다.'));
+    reader.onload = e => resolve(e.target.result.split(',')[1]);
+    reader.readAsDataURL(file);
+  });
+}
+
+function extFromFile(file) {
+  const byType = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif', 'image/gif': 'gif' };
+  if (byType[file.type]) return byType[file.type];
+  const parts = (file.name || '').split('.');
+  return parts.length > 1 ? parts.pop().toLowerCase() : 'jpg';
+}
+
+/* 이미지 참조 형식 호환 — 예전 데이터는 문자열 경로 하나, 새 데이터는 {thumb, original} 객체 */
+function imgPaths(ref) {
+  if (typeof ref === 'string') return { thumb: ref, original: ref };
+  return { thumb: ref.thumb, original: ref.original || ref.thumb };
+}
+
 /* ===========================================================
    GitHub 이미지 캐시 훅
 =========================================================== */
@@ -350,10 +410,73 @@ function useGhImage(cfg, path) {
   }, [path, cfg]);
   return url;
 }
-function GhImage({ cfg, path, className }) {
+function GhImage({ cfg, path, originalPath, className }) {
   const url = useGhImage(cfg, path);
   if (!url) return <div className={`bg-slate-200 dark:bg-slate-800 animate-pulse ${className}`} />;
-  return <img src={url} className={className} />;
+  return (
+    <img src={url} className={`${className} cursor-zoom-in`}
+      onClick={() => window.dispatchEvent(new CustomEvent('wj-lightbox-open', { detail: { cfg, path: originalPath || path } }))} />
+  );
+}
+
+function GlobalLightbox() {
+  const [state, setState] = useState(null);
+  const [url, setUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const handler = e => { setState(e.detail); setUrl(null); setError(''); };
+    window.addEventListener('wj-lightbox-open', handler);
+    return () => window.removeEventListener('wj-lightbox-open', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!state) return;
+    let cancelled = false;
+    setLoading(true);
+    ghGetImageBlobUrl(state.cfg, state.path)
+      .then(u => { if (!cancelled) { setUrl(u); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setError('원본을 불러오지 못했습니다.'); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [state]);
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') setState(null); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  if (!state) return null;
+
+  const handleDownload = () => {
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = state.path.split('/').pop();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-black/90 p-4 wj-modal-pop gap-3" onClick={() => setState(null)}>
+      <button onClick={() => setState(null)} className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-90 transition-all">
+        <X size={20} />
+      </button>
+      {loading && <LoaderCircle size={26} className="text-white/70 wj-spin" />}
+      {error && <p className="text-white/80 text-[13px]">{error}</p>}
+      {url && (
+        <React.Fragment>
+          <img src={url} className="max-w-full max-h-[78vh] object-contain rounded-lg" onClick={e => e.stopPropagation()} />
+          <button onClick={e => { e.stopPropagation(); handleDownload(); }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/10 text-white text-[13px] font-medium hover:bg-white/20 active:scale-95 transition-all">
+            <Download size={14} /> 원본 다운로드
+          </button>
+        </React.Fragment>
+      )}
+    </div>
+  );
 }
 
 /* ===========================================================
@@ -555,12 +678,134 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
   );
 }
 
+function PhraseManager({ phrases, onAdd, onDelete }) {
+  const [text, setText] = useState('');
+  const handleAdd = () => {
+    if (!text.trim()) return;
+    onAdd(text.trim());
+    setText('');
+  };
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
+      <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300 mb-2.5"><Quote size={14} /> 자주 쓰는 문구</div>
+      <div className="flex items-center gap-2 mb-2.5">
+        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()}
+          placeholder="예: 회의 참석, 코드 리뷰 진행"
+          className="flex-1 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <button onClick={handleAdd} disabled={!text.trim()}
+          className="p-1.5 rounded-md bg-[#E8A93B] text-[#1a1206] active:scale-90 disabled:opacity-40 disabled:active:scale-100 transition-all">
+          <Plus size={14} strokeWidth={2.5} />
+        </button>
+      </div>
+      {phrases.length === 0 ? (
+        <p className="text-[11px] text-slate-400 dark:text-slate-500">등록된 문구가 없습니다. 빠른 기록 입력창 위에 칩으로 표시돼요.</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {phrases.map(p => (
+            <span key={p.id} className="inline-flex items-center gap-1 text-[11.5px] px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              {p.text}
+              <button onClick={() => onDelete(p)} className="text-slate-400 hover:text-red-500 active:scale-90 transition-all"><X size={11} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ===========================================================
    빠른 기록 탭
 =========================================================== */
-function QuickCaptureTab({ cfg, notes, onAdd, onDelete, onPromote, uploading }) {
+function NoteEditModal({ open, note, cfg, onClose, onSave, saving }) {
+  const [text, setText] = useState('');
+  const [keepImages, setKeepImages] = useState([]);
+  const [newFiles, setNewFiles] = useState([]);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (open && note) {
+      setText(note.text || '');
+      setKeepImages(note.imageRefs || []);
+      setNewFiles([]);
+    }
+  }, [open, note]);
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape' && open) onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  if (!open || !note) return null;
+
+  const totalImages = keepImages.length + newFiles.length;
+  const handleFiles = e => {
+    const list = Array.from(e.target.files || []);
+    setNewFiles(prev => [...prev, ...list].slice(0, Math.max(0, 4 - keepImages.length)));
+    e.target.value = '';
+  };
+  const removeKeep = path => setKeepImages(prev => prev.filter(p => p !== path));
+  const removeNew = idx => setNewFiles(prev => prev.filter((_, i) => i !== idx));
+  const handleSubmit = e => {
+    e.preventDefault();
+    onSave(note, text.trim(), keepImages, newFiles);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-0 sm:p-6 overflow-y-auto">
+      <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose} />
+      <form onSubmit={handleSubmit} className="wj-modal-pop relative w-full sm:max-w-md bg-white dark:bg-slate-900 sm:rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl my-0 sm:my-8 max-h-[100vh] sm:max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+          <h2 className="text-[15px] font-semibold text-slate-800 dark:text-slate-100">빠른 기록 수정</h2>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={16} /></button>
+        </div>
+        <div className="px-5 py-4 space-y-3 overflow-y-auto">
+          <textarea value={text} onChange={e => setText(e.target.value)} rows={4}
+            className="w-full px-3 py-2 rounded-lg text-[13.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 resize-none" />
+          {(keepImages.length > 0 || newFiles.length > 0) && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {keepImages.map((ref, idx) => {
+                const { thumb, original } = imgPaths(ref);
+                return (
+                  <div key={thumb + idx} className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                    <GhImage cfg={cfg} path={thumb} originalPath={original} className="w-full h-full object-cover" />
+                    <button type="button" onClick={() => removeKeep(ref)} className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center active:scale-90 transition-transform"><X size={10} /></button>
+                  </div>
+                );
+              })}
+              {newFiles.map((f, i) => (
+                <div key={i} className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                  <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" />
+                  <button type="button" onClick={() => removeNew(i)} className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center active:scale-90 transition-transform"><X size={10} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div>
+            <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={totalImages >= 4}
+              className="inline-flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 active:scale-95 transition-all">
+              <Camera size={13} /> 사진 추가 {totalImages > 0 && `(${totalImages}/4)`}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 dark:border-slate-800 shrink-0">
+          <button type="button" onClick={onClose} className="px-3.5 py-2 rounded-lg text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">취소</button>
+          <button type="submit" disabled={saving}
+            className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-[#E8A93B] text-[#1a1206] hover:brightness-105 active:scale-[0.97] disabled:opacity-40 transition-all inline-flex items-center gap-1.5">
+            {saving && <LoaderCircle size={13} className="wj-spin" />} 수정 저장
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPermanentDelete, onEditSave, onPromote, uploading, savingEdit }) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
+  const [showTrash, setShowTrash] = useState(false);
+  const [editingNote, setEditingNote] = useState(null);
   const fileInputRef = useRef(null);
 
   const handleFiles = e => {
@@ -575,12 +820,33 @@ function QuickCaptureTab({ cfg, notes, onAdd, onDelete, onPromote, uploading }) 
     onAdd(text.trim(), files);
     setText(''); setFiles([]);
   };
+  const insertPhrase = t => setText(prev => {
+    if (!prev) return t;
+    const sep = /[\n ]$/.test(prev) ? '' : ' ';
+    return prev + sep + t;
+  });
 
-  const sorted = useMemo(() => [...notes].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [notes]);
+  const active = useMemo(() => notes.filter(n => !n.deleted).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [notes]);
+  const trashed = useMemo(() => notes.filter(n => n.deleted).sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0)), [notes]);
+
+  const handleEditSave = (note, newText, keepImages, newFiles) => {
+    onEditSave(note, newText, keepImages, newFiles);
+    setEditingNote(null);
+  };
 
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3 shadow-sm focus-within:border-[#E8A93B]/50 focus-within:ring-2 focus-within:ring-[#E8A93B]/12 transition-all">
+        {phrases && phrases.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+            {phrases.map(p => (
+              <button key={p.id} type="button" onClick={() => insertPhrase(p.text)}
+                className="shrink-0 inline-flex items-center gap-1 text-[11.5px] px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all whitespace-nowrap">
+                <Quote size={10} /> {p.text}
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
@@ -614,28 +880,65 @@ function QuickCaptureTab({ cfg, notes, onAdd, onDelete, onPromote, uploading }) 
         </div>
       </div>
 
-      {sorted.length === 0 ? (
+      {(active.length > 0 || trashed.length > 0) && (
+        <div className="flex items-center justify-between px-0.5">
+          <span className="text-[11.5px] text-slate-400 dark:text-slate-500 font-mono">
+            {showTrash ? `휴지통 ${trashed.length}건` : `${active.length}건`}
+          </span>
+          <button onClick={() => setShowTrash(v => !v)}
+            className="text-[11.5px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 inline-flex items-center gap-1">
+            <TrashIcon size={11} /> {showTrash ? '목록으로' : `휴지통${trashed.length > 0 ? ` (${trashed.length})` : ''}`}
+          </button>
+        </div>
+      )}
+
+      {showTrash ? (
+        trashed.length === 0 ? (
+          <div className="text-center py-14 text-slate-400 dark:text-slate-500 text-[13px]">휴지통이 비어 있습니다.</div>
+        ) : (
+          <div className="space-y-2.5">
+            {trashed.map(note => (
+              <div key={note.id} className="wj-enter rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-3.5 opacity-80">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[10.5px] font-mono text-slate-400 dark:text-slate-500">삭제됨 · {fmtDateShort((note.deletedAt ? new Date(note.deletedAt) : new Date()).toISOString().slice(0, 10))}</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => onRestore(note)} title="복원" className="p-1 rounded text-slate-400 dark:text-slate-500 hover:text-[#E8A93B] active:scale-90 transition-all"><Undo2 size={13} /></button>
+                    <button onClick={() => onPermanentDelete(note)} title="영구 삭제" className="p-1 rounded text-slate-400 dark:text-slate-500 hover:text-red-500 active:scale-90 transition-all"><Trash2 size={13} /></button>
+                  </div>
+                </div>
+                {note.text && <p className="text-[13px] text-slate-500 dark:text-slate-400 leading-relaxed mt-1.5 line-clamp-2 break-words">{note.text}</p>}
+              </div>
+            ))}
+          </div>
+        )
+      ) : active.length === 0 ? (
         <div className="text-center py-14 text-slate-400 dark:text-slate-500 text-[13px]">
           아직 빠른 기록이 없습니다. 위에서 바로 적어보세요.
         </div>
       ) : (
         <div className="space-y-2.5">
-          {sorted.map(note => (
+          {active.map(note => (
             <div key={note.id} className="wj-enter rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3.5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
               <div className="flex items-start justify-between gap-2">
                 <span className="text-[10.5px] font-mono text-slate-400 dark:text-slate-500">
                   {fmtDateShort((note.createdAt ? new Date(note.createdAt) : new Date()).toISOString().slice(0, 10))} {fmtTime(note.createdAt)}
                 </span>
-                <button onClick={() => onDelete(note)} className="p-1 rounded text-slate-300 dark:text-slate-600 hover:text-red-500 active:scale-90 transition-all">
-                  <Trash2 size={13} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setEditingNote(note)} title="수정" className="p-1 rounded text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 active:scale-90 transition-all">
+                    <Pencil size={13} />
+                  </button>
+                  <button onClick={() => onDelete(note)} title="삭제" className="p-1 rounded text-slate-300 dark:text-slate-600 hover:text-red-500 active:scale-90 transition-all">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
               {note.text && <p className="text-[13.5px] text-slate-700 dark:text-slate-200 leading-relaxed mt-1.5 whitespace-pre-wrap break-words">{note.text}</p>}
               {note.imageRefs && note.imageRefs.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap mt-2.5">
-                  {note.imageRefs.map(path => (
-                    <GhImage key={path} cfg={cfg} path={path} className="w-16 h-16 rounded-md object-cover border border-slate-200 dark:border-slate-700" />
-                  ))}
+                  {note.imageRefs.map((ref, i) => {
+                    const { thumb, original } = imgPaths(ref);
+                    return <GhImage key={thumb + i} cfg={cfg} path={thumb} originalPath={original} className="w-16 h-16 rounded-md object-cover border border-slate-200 dark:border-slate-700" />;
+                  })}
                 </div>
               )}
               <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
@@ -654,6 +957,8 @@ function QuickCaptureTab({ cfg, notes, onAdd, onDelete, onPromote, uploading }) 
           ))}
         </div>
       )}
+
+      <NoteEditModal open={!!editingNote} note={editingNote} cfg={cfg} onClose={() => setEditingNote(null)} onSave={handleEditSave} saving={savingEdit} />
     </div>
   );
 }
@@ -725,6 +1030,11 @@ function TodoTab({ todos, onAdd, onToggle, onDelete }) {
                 </button>
                 <span className="flex-1 text-[13.5px] text-slate-700 dark:text-slate-200 break-words">{t.text}</span>
                 {badge && <span className={`text-[10.5px] font-mono px-1.5 py-0.5 rounded shrink-0 ${badge.cls}`}>{badge.txt}</span>}
+                {t.due && (
+                  <button onClick={() => downloadICS(t.text, t.due)} title="캘린더에 추가" className="p-1 text-slate-300 dark:text-slate-600 hover:text-[#5B9DF9] active:scale-90 transition-all shrink-0">
+                    <CalendarPlus size={14} />
+                  </button>
+                )}
                 <button onClick={() => onDelete(t)} className="p-1 text-slate-300 dark:text-slate-600 hover:text-red-500 active:scale-90 transition-all shrink-0">
                   <X size={13} />
                 </button>
@@ -797,7 +1107,7 @@ function SelectPill({ value, onChange, options, placeholder, icon: Ico }) {
   );
 }
 
-function EntryCard({ cfg, entry, onEdit, onDelete }) {
+function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite }) {
   const [expanded, setExpanded] = useState(false);
   const meta = CATEGORY_MAP[entry.category] || CATEGORY_MAP['기타'];
   const hasMore = (entry.problem && entry.problem.length > 90) || (entry.solution && entry.solution.length > 90);
@@ -817,6 +1127,10 @@ function EntryCard({ cfg, entry, onEdit, onDelete }) {
             <h3 className="text-[15px] font-semibold text-slate-800 dark:text-slate-100 leading-snug break-words">{entry.title || '(제목 없음)'}</h3>
           </div>
           <div className="flex items-center gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
+            <button onClick={() => onToggleFavorite(entry)} title={entry.favorite ? '즐겨찾기 해제' : '즐겨찾기'}
+              className={`p-1.5 rounded-md active:scale-90 transition-all ${entry.favorite ? 'text-[#E8A93B]' : 'text-slate-400 dark:text-slate-500 hover:text-[#E8A93B]'} hover:bg-slate-100 dark:hover:bg-slate-800`}>
+              <Star size={14} fill={entry.favorite ? '#E8A93B' : 'none'} />
+            </button>
             <button onClick={() => onEdit(entry)} className="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all"><Pencil size={14} /></button>
             <button onClick={() => onDelete(entry)} className="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 active:scale-90 transition-all"><Trash2 size={14} /></button>
           </div>
@@ -862,8 +1176,20 @@ function EntryCard({ cfg, entry, onEdit, onDelete }) {
 
         {entry.images && entry.images.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap mt-3">
-            {entry.images.map(path => (
-              <GhImage key={path} cfg={cfg} path={path} className="w-14 h-14 rounded-md object-cover border border-slate-200 dark:border-slate-700" />
+            {entry.images.map((ref, i) => {
+              const { thumb, original } = imgPaths(ref);
+              return <GhImage key={thumb + i} cfg={cfg} path={thumb} originalPath={original} className="w-14 h-14 rounded-md object-cover border border-slate-200 dark:border-slate-700" />;
+            })}
+          </div>
+        )}
+
+        {entry.links && entry.links.length > 0 && (
+          <div className="mt-3 flex flex-col gap-1">
+            {entry.links.map((l, i) => (
+              <a key={i} href={l.url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[12px] text-[#5B9DF9] hover:underline break-all w-fit">
+                <Link2 size={11} className="shrink-0" /> {l.label || l.url}
+              </a>
             ))}
           </div>
         )}
@@ -882,7 +1208,7 @@ function EntryCard({ cfg, entry, onEdit, onDelete }) {
   );
 }
 
-const EMPTY_FORM = { date: todayStr(), title: '', category: '개발', importance: '중', bullets: [''], problem: '', solution: '', lesson: '', tagsText: '' };
+const EMPTY_FORM = { date: todayStr(), title: '', category: '개발', importance: '중', bullets: [''], problem: '', solution: '', lesson: '', tagsText: '', links: [] };
 
 function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -896,11 +1222,12 @@ function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
         importance: initial.importance || '중', bullets: initial.bullets && initial.bullets.length > 0 ? [...initial.bullets] : [''],
         problem: initial.problem || '', solution: initial.solution || '', lesson: initial.lesson || '',
         tagsText: (initial.tags || []).join(', '),
+        links: initial.links && initial.links.length > 0 ? initial.links.map(l => ({ ...l })) : [],
       });
     } else if (prefillNote) {
-      setForm({ ...EMPTY_FORM, bullets: [prefillNote.text || ''] });
+      setForm({ ...EMPTY_FORM, bullets: [prefillNote.text || ''], links: [] });
     } else {
-      setForm({ ...EMPTY_FORM, bullets: [''] });
+      setForm({ ...EMPTY_FORM, bullets: [''], links: [] });
     }
   }, [open, initial, prefillNote]);
 
@@ -916,6 +1243,9 @@ function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
   const updateBullet = (idx, value) => setForm(f => { const next = [...f.bullets]; next[idx] = value; return { ...f, bullets: next }; });
   const addBullet = () => setForm(f => ({ ...f, bullets: [...f.bullets, ''] }));
   const removeBullet = idx => setForm(f => ({ ...f, bullets: f.bullets.filter((_, i) => i !== idx) }));
+  const updateLink = (idx, field, value) => setForm(f => { const next = [...f.links]; next[idx] = { ...next[idx], [field]: value }; return { ...f, links: next }; });
+  const addLink = () => setForm(f => ({ ...f, links: [...f.links, { label: '', url: '' }] }));
+  const removeLink = idx => setForm(f => ({ ...f, links: f.links.filter((_, i) => i !== idx) }));
   const canSave = form.title.trim().length > 0 && form.date;
 
   const handleSubmit = e => {
@@ -926,6 +1256,7 @@ function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
       bullets: form.bullets.map(b => b.trim()).filter(Boolean),
       problem: form.problem.trim(), solution: form.solution.trim(), lesson: form.lesson.trim(),
       tags: form.tagsText.split(',').map(t => t.trim()).filter(Boolean),
+      links: form.links.map(l => ({ label: (l.label || '').trim(), url: (l.url || '').trim() })).filter(l => l.url),
     });
   };
 
@@ -1010,6 +1341,22 @@ function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
           </div>
 
           <div>
+            <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"><Link2 size={12} /> 참고 링크</label>
+            <div className="space-y-1.5">
+              {form.links.map((l, idx) => (
+                <div key={idx} className="flex items-center gap-1.5">
+                  <input type="text" value={l.label} onChange={e => updateLink(idx, 'label', e.target.value)} placeholder="이름(선택)"
+                    className="w-24 shrink-0 px-2 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+                  <input type="url" value={l.url} onChange={e => updateLink(idx, 'url', e.target.value)} placeholder="https://…"
+                    className="flex-1 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+                  <button type="button" onClick={() => removeLink(idx)} className="p-1 text-slate-400 hover:text-red-500 shrink-0"><X size={13} /></button>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={addLink} className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-[#E8A93B] hover:underline"><Plus size={12} /> 링크 추가</button>
+          </div>
+
+          <div>
             <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"><TagIcon size={12} /> 태그 <span className="text-slate-400 font-normal">(쉼표로 구분)</span></label>
             <input type="text" value={form.tagsText} onChange={e => setForm(f => ({ ...f, tagsText: e.target.value }))} placeholder="예: React, 성능개선, 협업"
               className="w-full px-3 py-2 rounded-lg text-[13px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
@@ -1027,11 +1374,65 @@ function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
   );
 }
 
-function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete }) {
+function SummaryPanel({ entries }) {
+  const [range, setRange] = useState('week');
+  const stats = useMemo(() => {
+    const now = new Date();
+    let start;
+    if (range === 'week') {
+      const day = now.getDay();
+      const diffToMonday = (day === 0 ? -6 : 1) - day;
+      start = new Date(now); start.setDate(now.getDate() + diffToMonday); start.setHours(0, 0, 0, 0);
+    } else {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    const pad = n => String(n).padStart(2, '0');
+    const startStr = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+    const inRange = entries.filter(e => (e.date || '') >= startStr);
+    const byCategory = {};
+    CATEGORIES.forEach(c => { byCategory[c.id] = 0; });
+    inRange.forEach(e => { byCategory[e.category] = (byCategory[e.category] || 0) + 1; });
+    return { total: inRange.length, byCategory };
+  }, [entries, range]);
+
+  const maxCat = Math.max(1, ...Object.values(stats.byCategory));
+
+  return (
+    <div className="wj-enter rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{range === 'week' ? '이번 주' : '이번 달'} 요약</div>
+        <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5">
+          <button onClick={() => setRange('week')}
+            className={`px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors ${range === 'week' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-400 dark:text-slate-500'}`}>주간</button>
+          <button onClick={() => setRange('month')}
+            className={`px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors ${range === 'month' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-400 dark:text-slate-500'}`}>월간</button>
+        </div>
+      </div>
+      <div className="font-mono text-2xl font-semibold text-slate-800 dark:text-slate-100 mb-3">
+        {stats.total}<span className="text-[12px] font-sans font-normal text-slate-400 dark:text-slate-500 ml-1">건 작성</span>
+      </div>
+      <div className="space-y-1.5">
+        {CATEGORIES.map(c => (
+          <div key={c.id} className="flex items-center gap-2">
+            <span className="text-[11px] w-16 shrink-0 text-slate-500 dark:text-slate-400">{c.label}</span>
+            <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div className="h-full rounded-full transition-all" style={{ width: `${(stats.byCategory[c.id] / maxCat) * 100}%`, background: c.color }} />
+            </div>
+            <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500 w-4 text-right">{stats.byCategory[c.id]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete, onToggleFavorite }) {
   const [query, setQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [importanceFilter, setImportanceFilter] = useState('');
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
 
   const projects = useMemo(() => [...new Set(entries.map(e => e.title).filter(Boolean))].sort(), [entries]);
 
@@ -1041,20 +1442,28 @@ function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete }) {
       .filter(e => !projectFilter || e.title === projectFilter)
       .filter(e => !categoryFilter || e.category === categoryFilter)
       .filter(e => !importanceFilter || e.importance === importanceFilter)
+      .filter(e => !favoriteOnly || e.favorite)
       .filter(e => {
         if (!q) return true;
         const hay = [e.title, e.problem, e.solution, e.lesson, ...(e.bullets || []), ...(e.tags || [])].join(' ').toLowerCase();
         return hay.includes(q);
       })
-      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
-  }, [entries, query, projectFilter, categoryFilter, importanceFilter]);
+      .sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+  }, [entries, query, projectFilter, categoryFilter, importanceFilter, favoriteOnly]);
 
-  const hasFilters = !!(query || projectFilter || categoryFilter || importanceFilter);
-  const resetFilters = () => { setQuery(''); setProjectFilter(''); setCategoryFilter(''); setImportanceFilter(''); };
+  const hasFilters = !!(query || projectFilter || categoryFilter || importanceFilter || favoriteOnly);
+  const resetFilters = () => { setQuery(''); setProjectFilter(''); setCategoryFilter(''); setImportanceFilter(''); setFavoriteOnly(false); };
 
   return (
     <div className="flex flex-col gap-4">
       <StatsStrip entries={entries} />
+
+      <div>
+        <button onClick={() => setShowSummary(v => !v)} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
+          <ChevronDown size={12} className={showSummary ? 'rotate-180 transition-transform' : 'transition-transform'} /> 주간·월간 요약
+        </button>
+        {showSummary && <div className="mt-2.5"><SummaryPanel entries={entries} /></div>}
+      </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
         <div className="relative flex-1 min-w-[180px]">
@@ -1066,6 +1475,10 @@ function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete }) {
           <SelectPill value={projectFilter} onChange={setProjectFilter} options={projects} placeholder="전체 프로젝트" icon={FolderKanban} />
           <SelectPill value={categoryFilter} onChange={setCategoryFilter} options={CATEGORIES.map(c => c.id)} placeholder="전체 카테고리" icon={Code2} />
           <SelectPill value={importanceFilter} onChange={setImportanceFilter} options={IMPORTANCE_LEVELS.map(i => i.id)} placeholder="전체 중요도" icon={AlertTriangle} />
+          <button onClick={() => setFavoriteOnly(v => !v)}
+            className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg text-xs font-medium border transition-colors ${favoriteOnly ? 'border-[#E8A93B]/50 bg-[#E8A93B]/10 text-[#E8A93B]' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'}`}>
+            <Star size={13} fill={favoriteOnly ? '#E8A93B' : 'none'} /> 즐겨찾기
+          </button>
         </div>
         <button onClick={onOpenNew} className="sm:ml-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-[#E8A93B] text-[#1a1206] hover:brightness-105 active:scale-[0.97] transition-all">
           <Plus size={14} strokeWidth={2.5} /> 새 일지 작성
@@ -1093,7 +1506,7 @@ function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(entry => <EntryCard key={entry.id} cfg={cfg} entry={entry} onEdit={onEdit} onDelete={onDelete} />)}
+          {filtered.map(entry => <EntryCard key={entry.id} cfg={cfg} entry={entry} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />)}
         </div>
       )}
     </div>
@@ -1115,11 +1528,14 @@ function App() {
   const [quickSha, setQuickSha] = useState(null);
   const [todos, setTodos] = useState([]);
   const [todosSha, setTodosSha] = useState(null);
+  const [phrases, setPhrases] = useState([]);
+  const [phrasesSha, setPhrasesSha] = useState(null);
   const [loading, setLoading] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [lastSynced, setLastSynced] = useState(null);
   const [toast, setToast] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [savingNoteEdit, setSavingNoteEdit] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [prefillNote, setPrefillNote] = useState(null);
@@ -1138,10 +1554,11 @@ function App() {
     if (!cfg) return;
     setLoading(true); setSyncError('');
     try {
-      const [e, q, t] = await Promise.all([ghGetJSON(cfg, PATH_ENTRIES), ghGetJSON(cfg, PATH_QUICK_NOTES), ghGetJSON(cfg, PATH_TODOS)]);
+      const [e, q, t, p] = await Promise.all([ghGetJSON(cfg, PATH_ENTRIES), ghGetJSON(cfg, PATH_QUICK_NOTES), ghGetJSON(cfg, PATH_TODOS), ghGetJSON(cfg, PATH_PHRASES)]);
       setEntries(e.data); setEntriesSha(e.sha);
       setQuickNotes(q.data); setQuickSha(q.sha);
       setTodos(t.data); setTodosSha(t.sha);
+      setPhrases(p.data); setPhrasesSha(p.sha);
       setLastSynced(Date.now());
     } catch (err) {
       setSyncError(err.message || '동기화에 실패했습니다.');
@@ -1177,10 +1594,14 @@ function App() {
     try {
       const imageRefs = [];
       for (const file of files) {
-        const b64 = await compressImage(file);
-        const path = `images/${Date.now()}-${Math.random().toString(16).slice(2, 8)}.jpg`;
-        await ghPutImage(cfg, path, b64, '빠른 기록 사진 추가');
-        imageRefs.push(path);
+        const id = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        const thumbB64 = await compressImage(file);
+        const thumbPath = `images/thumb/${id}.jpg`;
+        await ghPutImage(cfg, thumbPath, thumbB64, '빠른 기록 사진 추가 (목록용)');
+        const origB64 = await fileToBase64(file);
+        const originalPath = `images/original/${id}.${extFromFile(file)}`;
+        await ghPutImage(cfg, originalPath, origB64, '빠른 기록 사진 추가 (원본)');
+        imageRefs.push({ thumb: thumbPath, original: originalPath });
       }
       const newNote = { id: uid(), text, imageRefs, processed: false, linkedEntryId: null, createdAt: Date.now() };
       const newNotes = [newNote, ...quickNotes];
@@ -1195,14 +1616,63 @@ function App() {
   };
 
   const handleDeleteNote = async note => {
-    if (!window.confirm('이 기록을 삭제할까요?')) return;
     try {
-      const newNotes = quickNotes.filter(n => n.id !== note.id);
-      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 삭제');
+      const newNotes = quickNotes.map(n => n.id === note.id ? { ...n, deleted: true, deletedAt: Date.now() } : n);
+      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 휴지통으로 이동');
       setQuickNotes(newNotes); setQuickSha(newSha);
-      showToast('삭제했습니다.');
+      showToast('휴지통으로 이동했습니다.');
     } catch (err) {
       showToast('삭제 실패: ' + err.message);
+    }
+  };
+
+  const handleRestoreNote = async note => {
+    try {
+      const newNotes = quickNotes.map(n => n.id === note.id ? { ...n, deleted: false, deletedAt: null } : n);
+      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 복원');
+      setQuickNotes(newNotes); setQuickSha(newSha);
+      showToast('복원했습니다.');
+    } catch (err) {
+      showToast('복원 실패: ' + err.message);
+    }
+  };
+
+  const handlePermanentDeleteNote = async note => {
+    if (!window.confirm('완전히 삭제할까요? 이 작업은 되돌릴 수 없습니다.')) return;
+    try {
+      const newNotes = quickNotes.filter(n => n.id !== note.id);
+      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 영구 삭제');
+      setQuickNotes(newNotes); setQuickSha(newSha);
+      showToast('영구 삭제했습니다.');
+    } catch (err) {
+      showToast('삭제 실패: ' + err.message);
+    }
+  };
+
+  const handleEditNoteSave = async (note, newText, keepImages, newFiles) => {
+    setSavingNoteEdit(true);
+    try {
+      const uploadedRefs = [];
+      for (const file of newFiles) {
+        const id = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        const thumbB64 = await compressImage(file);
+        const thumbPath = `images/thumb/${id}.jpg`;
+        await ghPutImage(cfg, thumbPath, thumbB64, '빠른 기록 사진 추가 (목록용)');
+        const origB64 = await fileToBase64(file);
+        const originalPath = `images/original/${id}.${extFromFile(file)}`;
+        await ghPutImage(cfg, originalPath, origB64, '빠른 기록 사진 추가 (원본)');
+        uploadedRefs.push({ thumb: thumbPath, original: originalPath });
+      }
+      const newNotes = quickNotes.map(n => n.id === note.id
+        ? { ...n, text: newText, imageRefs: [...keepImages, ...uploadedRefs], updatedAt: Date.now() }
+        : n);
+      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 수정');
+      setQuickNotes(newNotes); setQuickSha(newSha);
+      showToast('수정했습니다.');
+    } catch (err) {
+      showToast('수정 실패: ' + err.message);
+    } finally {
+      setSavingNoteEdit(false);
     }
   };
 
@@ -1211,6 +1681,36 @@ function App() {
     setEditingEntry(null);
     setModalOpen(true);
     setTab('entries');
+  };
+
+  const handleAddPhrase = async text => {
+    try {
+      const newPhrases = [...phrases, { id: uid(), text }];
+      const newSha = await ghPutJSON(cfg, PATH_PHRASES, newPhrases, phrasesSha, '문구 템플릿 추가');
+      setPhrases(newPhrases); setPhrasesSha(newSha);
+    } catch (err) {
+      showToast('저장 실패: ' + err.message);
+    }
+  };
+
+  const handleDeletePhrase = async phrase => {
+    try {
+      const newPhrases = phrases.filter(p => p.id !== phrase.id);
+      const newSha = await ghPutJSON(cfg, PATH_PHRASES, newPhrases, phrasesSha, '문구 템플릿 삭제');
+      setPhrases(newPhrases); setPhrasesSha(newSha);
+    } catch (err) {
+      showToast('삭제 실패: ' + err.message);
+    }
+  };
+
+  const handleToggleFavorite = async entry => {
+    try {
+      const newEntries = entries.map(e => e.id === entry.id ? { ...e, favorite: !e.favorite, updatedAt: Date.now() } : e);
+      const newSha = await ghPutJSON(cfg, PATH_ENTRIES, newEntries, entriesSha, entry.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가');
+      setEntries(newEntries); setEntriesSha(newSha);
+    } catch (err) {
+      showToast('저장 실패: ' + err.message);
+    }
   };
 
   const handleAddTodo = async ({ text, due }) => {
@@ -1295,7 +1795,7 @@ function App() {
   }
 
   const overdueTodoCount = todos.filter(t => !t.done && t.due && daysUntil(t.due) <= 0).length;
-  const unprocessedNoteCount = quickNotes.filter(n => !n.processed).length;
+  const unprocessedNoteCount = quickNotes.filter(n => !n.processed && !n.deleted).length;
 
   return (
     <div className="h-[100dvh] flex flex-col bg-[#F7F7F9] dark:bg-[#0B0E13] transition-colors overflow-hidden">
@@ -1339,12 +1839,13 @@ function App() {
             </div>
           ) : (
           <React.Fragment>
-          {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={quickNotes} onAdd={handleAddNote} onDelete={handleDeleteNote} onPromote={handlePromote} uploading={uploading} />}
+          {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={quickNotes} phrases={phrases} onAdd={handleAddNote} onDelete={handleDeleteNote} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDeleteNote} onEditSave={handleEditNoteSave} onPromote={handlePromote} uploading={uploading} savingEdit={savingNoteEdit} />}
           {tab === 'todos' && <TodoTab todos={todos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} />}
-          {tab === 'entries' && <EntriesTab cfg={cfg} entries={entries} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} />}
+          {tab === 'entries' && <EntriesTab cfg={cfg} entries={entries} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} onToggleFavorite={handleToggleFavorite} />}
           {tab === 'settings' && (
             <div className="space-y-4">
               <SettingsPanel embedded initial={cfg} onSave={handleSaveConfig} onDisconnect={handleDisconnect} />
+              <PhraseManager phrases={phrases} onAdd={handleAddPhrase} onDelete={handleDeletePhrase} />
               <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300"><BellIcon size={14} /> 할 일 알림</div>
@@ -1372,6 +1873,7 @@ function App() {
 
       <EntryFormModal open={modalOpen} initial={editingEntry} prefillNote={prefillNote} onClose={closeModal} onSave={handleSaveEntry} />
       <Toast message={toast} />
+      <GlobalLightbox />
     </div>
   );
 }
