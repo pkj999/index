@@ -47,7 +47,7 @@
   html, body { background: #0B0E13; }
   * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
-  body { overscroll-behavior-y: none; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { overscroll-behavior-y: none; }
   ::selection { background: rgba(232, 169, 59, 0.35); }
 
   ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -1298,68 +1298,70 @@ function App() {
   const unprocessedNoteCount = quickNotes.filter(n => !n.processed).length;
 
   return (
-    <div className="min-h-screen bg-[#F7F7F9] dark:bg-[#0B0E13] transition-colors">
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5 sm:py-6 pb-28">
-        <header className="flex items-center justify-between mb-4">
-          <Logo />
-          <div className="flex items-center gap-1.5">
-            <button onClick={loadAll} disabled={loading} title="새로고침"
-              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all disabled:opacity-50">
-              <RefreshCw size={15} className={loading ? 'wj-spin' : ''} />
-            </button>
-            <button onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
-              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all">
-              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
-          </div>
-        </header>
-
-        {syncError && (
-          <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2.5 text-[12px] text-red-400">
-            <span className="break-words">{syncError}</span>
-            <button onClick={loadAll} className="shrink-0 underline">재시도</button>
-          </div>
-        )}
-        {!syncError && lastSynced && (
-          <div className="mb-4 text-[10.5px] text-slate-400 dark:text-slate-600 font-mono">
-            마지막 동기화 {fmtTime(lastSynced)} · 이 기기에서 새로고침해야 최신 상태가 반영돼요
-          </div>
-        )}
-
-        {loading && !lastSynced ? (
-          <div className="space-y-2.5">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 overflow-hidden relative">
-                <div className="h-3 w-24 rounded bg-slate-100 dark:bg-slate-800 animate-pulse mb-3" />
-                <div className="h-3.5 w-2/3 rounded bg-slate-100 dark:bg-slate-800 animate-pulse mb-2" />
-                <div className="h-3 w-full rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
-              </div>
-            ))}
-          </div>
-        ) : (
-        <React.Fragment>
-        {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={quickNotes} onAdd={handleAddNote} onDelete={handleDeleteNote} onPromote={handlePromote} uploading={uploading} />}
-        {tab === 'todos' && <TodoTab todos={todos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} />}
-        {tab === 'entries' && <EntriesTab cfg={cfg} entries={entries} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} />}
-        {tab === 'settings' && (
-          <div className="space-y-4">
-            <SettingsPanel embedded initial={cfg} onSave={handleSaveConfig} onDisconnect={handleDisconnect} />
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300"><BellIcon size={14} /> 할 일 알림</div>
-                <button onClick={requestNotifPermission} className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">권한 요청</button>
-              </div>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
-                이 앱을 열어뒀을 때만 뜨는 알림이에요. 폰이 잠겨있거나 앱을 닫았을 때 울리는 진짜 알람은 아닙니다.
-              </p>
+    <div className="h-[100dvh] flex flex-col bg-[#F7F7F9] dark:bg-[#0B0E13] transition-colors overflow-hidden">
+      <div className="flex-1 overflow-y-auto" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
+          <header className="flex items-center justify-between mb-4">
+            <Logo />
+            <div className="flex items-center gap-1.5">
+              <button onClick={loadAll} disabled={loading} title="새로고침"
+                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all disabled:opacity-50">
+                <RefreshCw size={15} className={loading ? 'wj-spin' : ''} />
+              </button>
+              <button onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all">
+                {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+              </button>
             </div>
-          </div>
-        )}
-        </React.Fragment>
-        )}
+          </header>
+
+          {syncError && (
+            <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2.5 text-[12px] text-red-400">
+              <span className="break-words">{syncError}</span>
+              <button onClick={loadAll} className="shrink-0 underline">재시도</button>
+            </div>
+          )}
+          {!syncError && lastSynced && (
+            <div className="mb-4 text-[10.5px] text-slate-400 dark:text-slate-600 font-mono">
+              마지막 동기화 {fmtTime(lastSynced)} · 이 기기에서 새로고침해야 최신 상태가 반영돼요
+            </div>
+          )}
+
+          {loading && !lastSynced ? (
+            <div className="space-y-2.5">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 overflow-hidden relative">
+                  <div className="h-3 w-24 rounded bg-slate-100 dark:bg-slate-800 animate-pulse mb-3" />
+                  <div className="h-3.5 w-2/3 rounded bg-slate-100 dark:bg-slate-800 animate-pulse mb-2" />
+                  <div className="h-3 w-full rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : (
+          <React.Fragment>
+          {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={quickNotes} onAdd={handleAddNote} onDelete={handleDeleteNote} onPromote={handlePromote} uploading={uploading} />}
+          {tab === 'todos' && <TodoTab todos={todos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} />}
+          {tab === 'entries' && <EntriesTab cfg={cfg} entries={entries} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} />}
+          {tab === 'settings' && (
+            <div className="space-y-4">
+              <SettingsPanel embedded initial={cfg} onSave={handleSaveConfig} onDisconnect={handleDisconnect} />
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300"><BellIcon size={14} /> 할 일 알림</div>
+                  <button onClick={requestNotifPermission} className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">권한 요청</button>
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
+                  이 앱을 열어뒀을 때만 뜨는 알림이에요. 폰이 잠겨있거나 앱을 닫았을 때 울리는 진짜 알람은 아닙니다.
+                </p>
+              </div>
+            </div>
+          )}
+          </React.Fragment>
+          )}
+        </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-40 px-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}>
+      <div className="shrink-0 px-3 pt-2" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)' }}>
         <div className="max-w-2xl mx-auto flex items-stretch rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 backdrop-blur-md shadow-[0_10px_30px_-6px_rgba(15,23,42,0.18)] dark:shadow-[0_10px_30px_-6px_rgba(0,0,0,0.5)] px-1 py-1">
           <TabButton active={tab === 'quick'} onClick={() => setTab('quick')} icon={Inbox} label="빠른 기록" badge={unprocessedNoteCount} />
           <TabButton active={tab === 'todos'} onClick={() => setTab('todos')} icon={ListChecks} label="할 일" badge={overdueTodoCount} />
