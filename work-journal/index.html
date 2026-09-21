@@ -486,7 +486,7 @@ function Logo() {
   return (
     <div className="flex items-center gap-2.5">
       <div className="w-8 h-8 rounded-[7px] bg-[#45C4B0] flex items-center justify-center shrink-0 shadow-[0_0_0_1px_rgba(0,0,0,0.06)]">
-        <span className="font-mono text-[13px] font-bold text-[#1a1206] leading-none">業</span>
+        <ListChecks size={16} strokeWidth={2.5} className="text-white" />
       </div>
       <div className="leading-tight">
         <div className="font-semibold text-[15px] text-slate-900 dark:text-slate-100 tracking-tight">업무일지</div>
@@ -601,7 +601,7 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
         {!embedded && (
           <div className="text-center mb-6">
             <div className="w-11 h-11 rounded-xl bg-[#45C4B0] flex items-center justify-center mx-auto mb-3">
-              <span className="font-mono text-lg font-bold text-[#1a1206]">業</span>
+              <ListChecks size={22} strokeWidth={2.5} className="text-white" />
             </div>
             <h1 className="text-lg font-semibold text-slate-100">업무일지에 연결하기</h1>
             <p className="text-[12.5px] text-slate-400 mt-1.5 leading-relaxed">
