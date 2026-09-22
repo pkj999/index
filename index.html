@@ -125,8 +125,10 @@
 
   #wt-root .wt-cal-cell { aspect-ratio: 1; border-radius: 8px; border: none; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; font-size: 12px; color: var(--wt-text); padding: 0; }
   #wt-root .wt-cal-cell.empty { visibility: hidden; }
-  #wt-root .wt-cal-cell.today { background: var(--wt-accent-soft); font-weight: 700; }
+  #wt-root .wt-cal-cell.today { font-weight: 700; }
   #wt-root .wt-cal-cell.selected { outline: 2px solid var(--wt-accent); }
+  #wt-root .wt-cal-daynum { display: inline-flex; align-items: center; justify-content: center; width: 19px; height: 19px; border-radius: 50%; }
+  #wt-root .wt-cal-cell.today .wt-cal-daynum { background: var(--wt-accent); color: #fff; }
   #wt-root .wt-cal-dots { display: flex; gap: 2px; height: 5px; }
   #wt-root .wt-cal-dot { width: 5px; height: 5px; border-radius: 50%; }
 
@@ -922,6 +924,28 @@
   };
   var CATEGORIES = Object.keys(CATALOG);
   function meta(c) { return CAT_META[c] || CAT_META['기타']; }
+
+  // hex 색상을 낮은 투명도의 rgba로 변환 (캘린더 셀 파스텔 배경용)
+  function hexToRgba(hex, alpha) {
+    var h = hex.replace('#', '');
+    var r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
+
+  // 하루 기록 중 세트 수 기준으로 가장 많이 한 부위(카테고리) 반환
+  function dominantCategory(day) {
+    if (!day || !day.exercises || !day.exercises.length) return null;
+    var counts = {};
+    day.exercises.forEach(function (ex) {
+      var c = ex.category || '기타';
+      counts[c] = (counts[c] || 0) + ((ex.sets || []).length || 1);
+    });
+    var best = null, bestN = -1;
+    Object.keys(counts).forEach(function (c) {
+      if (counts[c] > bestN) { best = c; bestN = counts[c]; }
+    });
+    return best;
+  }
 
   // 세트 강도 3단계
   var RPE = [
@@ -3124,8 +3148,10 @@
           dots = cats.slice(0, 4).map(function (c) {
             return '<span class="wt-cal-dot" style="background:' + meta(c).color + ';"></span>';
           }).join('');
+          var dom = dominantCategory(day);
+          if (dom) cell.style.background = hexToRgba(meta(dom).color, 0.22);
         }
-        cell.innerHTML = '<span>' + n + '</span><span class="wt-cal-dots">' + dots + '</span>';
+        cell.innerHTML = '<span class="wt-cal-daynum">' + n + '</span><span class="wt-cal-dots">' + dots + '</span>';
         cell.addEventListener('click', function () {
           calSelected = (calSelected === iso) ? null : iso;
           renderCalendar();
