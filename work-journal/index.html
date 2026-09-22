@@ -188,13 +188,14 @@ const DatabaseIcon = mkIcon('database');
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'v9 · 2026-09-22';
+const APP_VERSION = 'v12 · 2026-09-22';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
 const PATH_QUICK_NOTES = 'data/quick-notes.json';
 const PATH_TODOS = 'data/todos.json';
 const PATH_PHRASES = 'data/phrases.json';
+const PATH_CATEGORIES = 'data/categories.json'; // 사용자가 직접 추가한 카테고리
 const GH_API = 'https://api.github.com';
 
 const CATEGORIES = [
@@ -204,7 +205,9 @@ const CATEGORIES = [
   { id: '트러블슈팅', label: '트러블슈팅', color: '#F0654A', Icon: Wrench },
   { id: '기타',      label: '기타',      color: '#8B93A1', Icon: MoreHorizontal },
 ];
-const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
+const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map(c => [c.id, c])); // 기본 카테고리만. 커스텀 포함 조회는 아래 참고
+// 사용자가 추가한 카테고리 고를 색 팔레트 — 자유 색상 선택 대신 앱 톤에 맞는 것 중에서만 고르게 해서 난잡해지는 걸 방지
+const CUSTOM_CATEGORY_COLORS = ['#5B9DF9', '#8B7CF6', '#45C4B0', '#F0654A', '#E8A93B', '#EC7FB0', '#3FB6E0', '#8B93A1'];
 
 const IMPORTANCE_LEVELS = [
   { id: '상', label: '상', level: 3, color: '#F0654A' },
@@ -670,8 +673,9 @@ function Logo() {
   );
 }
 
-function CategoryBadge({ category, size = 'md' }) {
-  const meta = CATEGORY_MAP[category] || CATEGORY_MAP['기타'];
+function CategoryBadge({ category, size = 'md', categoryMap }) {
+  const map = categoryMap || CATEGORY_MAP;
+  const meta = map[category] || map['기타'] || CATEGORY_MAP['기타'];
   const Ico = meta.Icon;
   const pad = size === 'sm' ? 'px-1.5 py-0.5 text-[10.5px]' : 'px-2 py-1 text-xs';
   return (
@@ -1041,6 +1045,53 @@ function RepoArchivePanel({ cfg, onRotate }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// 설정 탭 — 기본 5개 카테고리는 고정, 사용자가 만든 것만 색상 골라서 추가/삭제
+function CategoryManager({ customCategories, onAdd, onDelete }) {
+  const [text, setText] = useState('');
+  const [color, setColor] = useState(CUSTOM_CATEGORY_COLORS[0]);
+  const handleAdd = () => {
+    if (!text.trim()) return;
+    onAdd(text.trim(), color);
+    setText('');
+  };
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
+      <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300 mb-2.5"><TagIcon size={14} /> 카테고리</div>
+
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {CATEGORIES.map(c => (
+          <span key={c.id} className="inline-flex items-center gap-1 text-[11.5px] px-2.5 py-1 rounded-full" style={{ color: c.color, background: c.color + '1A' }}>
+            {c.label}
+          </span>
+        ))}
+        {customCategories.map(c => (
+          <span key={c.label} className="inline-flex items-center gap-1 text-[11.5px] px-2.5 py-1 rounded-full" style={{ color: c.color, background: c.color + '1A' }}>
+            {c.label}
+            <button onClick={() => onDelete(c)} className="hover:opacity-60 active:scale-90 transition-all"><X size={11} /></button>
+          </span>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 mb-2">
+        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()}
+          placeholder="새 카테고리 이름"
+          className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <button onClick={handleAdd} disabled={!text.trim()}
+          className="shrink-0 p-1.5 rounded-md bg-[#45C4B0] text-[#1a1206] active:scale-90 disabled:opacity-40 disabled:active:scale-100 transition-all">
+          <Plus size={14} strokeWidth={2.5} />
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5">
+        {CUSTOM_CATEGORY_COLORS.map(c => (
+          <button key={c} onClick={() => setColor(c)} title={c}
+            className={`w-5 h-5 rounded-full active:scale-90 transition-all ${color === c ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-slate-900' : ''}`}
+            style={{ background: c, ...(color === c ? { boxShadow: `0 0 0 2px ${c}` } : {}) }} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1416,11 +1467,14 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
 /* ===========================================================
    할 일 탭
 =========================================================== */
-function TodoTab({ todos, onAdd, onToggle, onDelete }) {
+function TodoTab({ todos, onAdd, onToggle, onDelete, onEdit, onClearDone }) {
   const [text, setText] = useState('');
   const [due, setDue] = useState('');
   const [showDone, setShowDone] = useState(false);
   const [completingId, setCompletingId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [editDue, setEditDue] = useState('');
 
   const handleToggleAnimated = t => {
     if (t.done) { onToggle(t); return; } // 완료 취소는 바로 처리
@@ -1431,22 +1485,92 @@ function TodoTab({ todos, onAdd, onToggle, onDelete }) {
     }, 260);
   };
 
-  const { pending, done, overdueCount, todayCount } = useMemo(() => {
+  const startEdit = t => { setEditingId(t.id); setEditText(t.text); setEditDue(t.due || ''); };
+  const cancelEdit = () => setEditingId(null);
+  const saveEdit = t => {
+    if (!editText.trim()) return;
+    onEdit(t, { text: editText.trim(), due: editDue || null });
+    setEditingId(null);
+  };
+
+  // 오늘/이번 주/다음 주 이후/기한 없음으로 묶어서 보여줌 — 기한 없이 쌓아둔 것과 당장 급한 것이 섞여 안 보이게
+  const BUCKETS = [
+    { key: 'overdue', label: '기한 지남' },
+    { key: 'today', label: '오늘' },
+    { key: 'week', label: '이번 주' },
+    { key: 'later', label: '다음 주 이후' },
+    { key: 'none', label: '기한 없음' },
+  ];
+  const bucketOf = t => {
+    if (!t.due) return 'none';
+    const diff = daysUntil(t.due);
+    if (diff < 0) return 'overdue';
+    if (diff === 0) return 'today';
+    const day = new Date().getDay(); // 0=일요일
+    const daysLeftInWeek = day === 0 ? 0 : 7 - day;
+    return diff <= daysLeftInWeek ? 'week' : 'later';
+  };
+
+  const { pending, done, overdueCount, todayCount, grouped } = useMemo(() => {
     const p = todos.filter(t => !t.done).sort((a, b) => (a.due || '9999-99-99').localeCompare(b.due || '9999-99-99'));
     const d = todos.filter(t => t.done).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     let od = 0, tc = 0;
+    const g = { overdue: [], today: [], week: [], later: [], none: [] };
     p.forEach(t => {
-      if (!t.due) return;
-      const diff = daysUntil(t.due);
-      if (diff < 0) od++; else if (diff === 0) tc++;
+      const b = bucketOf(t);
+      g[b].push(t);
+      if (b === 'overdue') od++; else if (b === 'today') tc++;
     });
-    return { pending: p, done: d, overdueCount: od, todayCount: tc };
+    return { pending: p, done: d, overdueCount: od, todayCount: tc, grouped: g };
   }, [todos]);
 
   const handleAdd = () => {
     if (!text.trim()) return;
     onAdd({ text: text.trim(), due: due || null });
     setText(''); setDue('');
+  };
+
+  const renderTodoRow = t => {
+    const diff = daysUntil(t.due);
+    let badge = null;
+    if (t.due) {
+      if (diff < 0) badge = { txt: `${-diff}일 지남`, cls: 'text-[#F0654A] bg-[#F0654A]/10' };
+      else if (diff === 0) badge = { txt: '오늘', cls: 'text-[#E8A93B] bg-[#E8A93B]/10' };
+      else badge = { txt: `D-${diff}`, cls: 'text-slate-400 bg-slate-100 dark:bg-slate-800' };
+    }
+    if (editingId === t.id) {
+      return (
+        <div key={t.id} className="rounded-lg border border-[#45C4B0]/50 bg-white dark:bg-slate-900/60 px-3 py-2.5 flex items-center gap-2">
+          <input value={editText} onChange={e => setEditText(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveEdit(t)} autoFocus
+            className="flex-1 min-w-0 px-2 py-1 text-[13px] bg-slate-50 dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200" />
+          <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)}
+            className="w-[118px] shrink-0 px-2 py-1 rounded-md text-[12px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300" />
+          <button onClick={() => saveEdit(t)} className="shrink-0 p-1.5 rounded-md bg-[#45C4B0] text-[#1a1206] active:scale-90 transition-all"><CircleCheckBig size={14} /></button>
+          <button onClick={cancelEdit} className="shrink-0 p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 active:scale-90 transition-all"><X size={14} /></button>
+        </div>
+      );
+    }
+    return (
+      <div key={t.id} className={`flex items-center gap-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2.5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors ${completingId === t.id ? 'wj-item-leaving' : ''}`}>
+        <button onClick={() => handleToggleAnimated(t)} disabled={completingId === t.id}
+          className={`shrink-0 transition-all active:scale-90 ${completingId === t.id ? 'text-emerald-500 wj-check-bounce' : 'text-slate-300 dark:text-slate-600 hover:text-[#45C4B0]'}`}>
+          {completingId === t.id ? <CircleCheckBig size={18} /> : <CircleIcon size={18} />}
+        </button>
+        <span onClick={() => startEdit(t)} className="flex-1 min-w-0 text-[13.5px] text-slate-700 dark:text-slate-200 break-words cursor-pointer">{t.text}</span>
+        {badge && <span className={`text-[10.5px] font-mono px-1.5 py-0.5 rounded shrink-0 ${badge.cls}`}>{badge.txt}</span>}
+        {t.due && (
+          <button onClick={() => downloadICS(t.text, t.due)} title="캘린더에 추가" className="p-1 text-slate-300 dark:text-slate-600 hover:text-[#5B9DF9] active:scale-90 transition-all shrink-0">
+            <CalendarPlus size={14} />
+          </button>
+        )}
+        <button onClick={() => startEdit(t)} title="수정" className="p-1 text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 active:scale-90 transition-all shrink-0">
+          <Pencil size={13} />
+        </button>
+        <button onClick={() => onDelete(t)} className="p-1 text-slate-300 dark:text-slate-600 hover:text-red-500 active:scale-90 transition-all shrink-0">
+          <X size={13} />
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -1474,42 +1598,28 @@ function TodoTab({ todos, onAdd, onToggle, onDelete }) {
       {pending.length === 0 ? (
         <div className="text-center py-10 text-slate-400 dark:text-slate-500 text-[13px]">할 일이 모두 처리됐습니다.</div>
       ) : (
-        <div className="space-y-1.5">
-          {pending.map(t => {
-            const diff = daysUntil(t.due);
-            let badge = null;
-            if (t.due) {
-              if (diff < 0) badge = { txt: `${-diff}일 지남`, cls: 'text-[#F0654A] bg-[#F0654A]/10' };
-              else if (diff === 0) badge = { txt: '오늘', cls: 'text-[#E8A93B] bg-[#E8A93B]/10' };
-              else badge = { txt: `D-${diff}`, cls: 'text-slate-400 bg-slate-100 dark:bg-slate-800' };
-            }
-            return (
-              <div key={t.id} className={`flex items-center gap-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2.5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors ${completingId === t.id ? 'wj-item-leaving' : ''}`}>
-                <button onClick={() => handleToggleAnimated(t)} disabled={completingId === t.id}
-                  className={`shrink-0 transition-all active:scale-90 ${completingId === t.id ? 'text-emerald-500 wj-check-bounce' : 'text-slate-300 dark:text-slate-600 hover:text-[#45C4B0]'}`}>
-                  {completingId === t.id ? <CircleCheckBig size={18} /> : <CircleIcon size={18} />}
-                </button>
-                <span className="flex-1 min-w-0 text-[13.5px] text-slate-700 dark:text-slate-200 break-words">{t.text}</span>
-                {badge && <span className={`text-[10.5px] font-mono px-1.5 py-0.5 rounded shrink-0 ${badge.cls}`}>{badge.txt}</span>}
-                {t.due && (
-                  <button onClick={() => downloadICS(t.text, t.due)} title="캘린더에 추가" className="p-1 text-slate-300 dark:text-slate-600 hover:text-[#5B9DF9] active:scale-90 transition-all shrink-0">
-                    <CalendarPlus size={14} />
-                  </button>
-                )}
-                <button onClick={() => onDelete(t)} className="p-1 text-slate-300 dark:text-slate-600 hover:text-red-500 active:scale-90 transition-all shrink-0">
-                  <X size={13} />
-                </button>
-              </div>
-            );
-          })}
+        <div className="space-y-4">
+          {BUCKETS.map(b => grouped[b.key].length > 0 && (
+            <div key={b.key}>
+              <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-1.5 px-0.5">{b.label} · {grouped[b.key].length}</div>
+              <div className="space-y-1.5">{grouped[b.key].map(renderTodoRow)}</div>
+            </div>
+          ))}
         </div>
       )}
 
       {done.length > 0 && (
         <div className="pt-1">
-          <button onClick={() => setShowDone(v => !v)} className="text-[11.5px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-1">
-            <ChevronDown size={12} className={showDone ? 'rotate-180 transition-transform' : 'transition-transform'} /> 완료 {done.length}건
-          </button>
+          <div className="flex items-center justify-between">
+            <button onClick={() => setShowDone(v => !v)} className="text-[11.5px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-1">
+              <ChevronDown size={12} className={showDone ? 'rotate-180 transition-transform' : 'transition-transform'} /> 완료 {done.length}건
+            </button>
+            {showDone && (
+              <button onClick={onClearDone} className="text-[11px] text-slate-400 dark:text-slate-500 hover:text-red-500 flex items-center gap-1">
+                <Trash2 size={11} /> 완료된 항목 전체 삭제
+              </button>
+            )}
+          </div>
           {showDone && (
             <div className="space-y-1.5 mt-2">
               {done.map(t => (
@@ -1554,6 +1664,40 @@ function StatsStrip({ entries }) {
   );
 }
 
+// 자유 입력은 그대로 허용하면서, 기존에 썼던 값들을 밑에 후보로 보여주는 콤보박스.
+// 프로젝트명 같은 "웬만하면 기존 걸 재사용해야 하는" 필드의 오타로 인한 데이터 분산을 줄이기 위한 용도.
+function ComboBoxInput({ value, onChange, suggestions, placeholder, autoFocus, inputRef }) {
+  const [focused, setFocused] = useState(false);
+  const filtered = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    return (suggestions || [])
+      .filter(s => s !== value && (!q || s.toLowerCase().includes(q)))
+      .slice(0, 6);
+  }, [suggestions, value]);
+  const showDropdown = focused && filtered.length > 0;
+
+  return (
+    <div className="relative">
+      <input type="text" ref={inputRef} autoFocus={autoFocus} value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 120)} // 후보 클릭이 blur보다 먼저 먹히게 살짝 지연
+        placeholder={placeholder}
+        className="w-full px-3 py-2 rounded-lg text-[13.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-[#45C4B0]/60 transition-colors" />
+      {showDropdown && (
+        <div className="absolute z-20 left-0 right-0 mt-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+          {filtered.map(s => (
+            <button key={s} type="button" onMouseDown={() => onChange(s)}
+              className="w-full text-left px-3 py-2 text-[13px] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 truncate">
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SelectPill({ value, onChange, options, placeholder, icon: Ico }) {
   return (
     <div className="relative">
@@ -1568,10 +1712,11 @@ function SelectPill({ value, onChange, options, placeholder, icon: Ico }) {
   );
 }
 
-function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite }) {
+function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap }) {
   const [expanded, setExpanded] = useState(false);
   const [favBounce, setFavBounce] = useState(false);
-  const meta = CATEGORY_MAP[entry.category] || CATEGORY_MAP['기타'];
+  const catMap = categoryMap || CATEGORY_MAP;
+  const meta = catMap[entry.category] || catMap['기타'] || CATEGORY_MAP['기타'];
   const hasMore = (entry.problem && entry.problem.length > 90) || (entry.solution && entry.solution.length > 90);
   const readonly = !!entry._readonly;
   const imgCfg = repoCfgFor(cfg, entry._repo);
@@ -1587,7 +1732,7 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite }) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1.5">
-              <CategoryBadge category={entry.category} />
+              <CategoryBadge category={entry.category} categoryMap={catMap} />
               <ImportanceMeter level={entry.importance} />
               <span className="font-mono text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
                 <Calendar size={11} /> {fmtDateShort(entry.date)}
@@ -1684,7 +1829,7 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite }) {
 
 const EMPTY_FORM = { date: todayStr(), title: '', category: '개발', importance: '중', bullets: [''], problem: '', solution: '', lesson: '', tagsText: '', links: [] };
 
-function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
+function EntryFormModal({ open, initial, prefillNote, existingProjects, categories, onClose, onSave }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const firstFieldRef = useRef(null);
   useBackButtonClose(open, onClose);
@@ -1757,7 +1902,7 @@ function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
               <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">카테고리</label>
               <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                 className="w-full px-2.5 py-2 rounded-lg text-[13px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
-                {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                {(categories || CATEGORIES).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
             <div>
@@ -1776,9 +1921,12 @@ function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
 
           <div>
             <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">프로젝트 / 업무명</label>
-            <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              placeholder="예: 노광 CHUCK 흑색 용사코팅 반사율 이슈 대응"
-              className="w-full px-3 py-2 rounded-lg text-[13.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+            <ComboBoxInput value={form.title} onChange={v => setForm(f => ({ ...f, title: v }))}
+              suggestions={existingProjects || []}
+              placeholder="예: 노광 CHUCK 흑색 용사코팅 반사율 이슈 대응" />
+            <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1 leading-relaxed">
+              같은 프로젝트는 이전에 썼던 이름 그대로 써주세요 — 오타가 나면 다른 프로젝트로 나뉘어요. 입력하면 기존 이름이 밑에 후보로 떠요.
+            </p>
           </div>
 
           <div>
@@ -1849,8 +1997,9 @@ function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
   );
 }
 
-function SummaryPanel({ entries }) {
+function SummaryPanel({ entries, categories }) {
   const [range, setRange] = useState('week');
+  const cats = categories || CATEGORIES;
   const stats = useMemo(() => {
     const now = new Date();
     let start;
@@ -1865,10 +2014,10 @@ function SummaryPanel({ entries }) {
     const startStr = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
     const inRange = entries.filter(e => (e.date || '') >= startStr);
     const byCategory = {};
-    CATEGORIES.forEach(c => { byCategory[c.id] = 0; });
+    cats.forEach(c => { byCategory[c.id] = 0; });
     inRange.forEach(e => { byCategory[e.category] = (byCategory[e.category] || 0) + 1; });
     return { total: inRange.length, byCategory };
-  }, [entries, range]);
+  }, [entries, range, cats]);
 
   const maxCat = Math.max(1, ...Object.values(stats.byCategory));
 
@@ -1887,7 +2036,7 @@ function SummaryPanel({ entries }) {
         {stats.total}<span className="text-[12px] font-sans font-normal text-slate-400 dark:text-slate-500 ml-1">건 작성</span>
       </div>
       <div className="space-y-1.5">
-        {CATEGORIES.map(c => (
+        {cats.map(c => (
           <div key={c.id} className="flex items-center gap-2">
             <span className="text-[11px] w-16 shrink-0 text-slate-500 dark:text-slate-400">{c.label}</span>
             <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
@@ -1939,7 +2088,7 @@ function MonthCalendar({ year, month, entriesByDay, notesByDay, selectedDay, onS
 }
 
 // 날짜를 누르면 뜨는 바텀시트 — 그날의 일지 + 빠른 기록을 따로 보여줌 (읽기 위주, 일지는 눌러서 수정 가능)
-function DayDetailSheet({ open, dateKey, cfg, dayEntries, dayNotes, onClose, onEditEntry }) {
+function DayDetailSheet({ open, dateKey, cfg, categoryMap, dayEntries, dayNotes, onClose, onEditEntry }) {
   useBackButtonClose(open, onClose);
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape' && open) onClose(); }
@@ -1973,13 +2122,12 @@ function DayDetailSheet({ open, dateKey, cfg, dayEntries, dayNotes, onClose, onE
                   <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-2 flex items-center gap-1"><FolderKanban size={11} /> 업무일지 {dayEntries.length}건</div>
                   <div className="space-y-2">
                     {dayEntries.map(entry => {
-                      const meta = CATEGORY_MAP[entry.category] || CATEGORY_MAP['기타'];
                       const imgCfg = repoCfgFor(cfg, entry._repo);
                       return (
                         <button key={entry.id} onClick={() => onEditEntry(entry)}
                           className="w-full text-left rounded-lg border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 p-3 transition-colors">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <CategoryBadge category={entry.category} size="sm" />
+                            <CategoryBadge category={entry.category} size="sm" categoryMap={categoryMap} />
                             {entry._readonly && <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">보관 레포</span>}
                           </div>
                           <div className="text-[13px] font-medium text-slate-800 dark:text-slate-100">{entry.title || '(제목 없음)'}</div>
@@ -2036,7 +2184,7 @@ function DayDetailSheet({ open, dateKey, cfg, dayEntries, dayNotes, onClose, onE
   );
 }
 
-function EntriesTab({ cfg, entries, notes, onOpenNew, onEdit, onDelete, onToggleFavorite, hasArchives, archivesLoaded, archiveLoading, onLoadArchives }) {
+function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, onEdit, onDelete, onToggleFavorite, hasArchives, archivesLoaded, archiveLoading, onLoadArchives }) {
   const [query, setQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -2104,7 +2252,7 @@ function EntriesTab({ cfg, entries, notes, onOpenNew, onEdit, onDelete, onToggle
         <button onClick={() => setShowSummary(v => !v)} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
           <ChevronDown size={12} className={showSummary ? 'rotate-180 transition-transform' : 'transition-transform'} /> 주간·월간 요약
         </button>
-        {showSummary && <div className="mt-2.5"><SummaryPanel entries={entries} /></div>}
+        {showSummary && <div className="mt-2.5"><SummaryPanel entries={entries} categories={categories} /></div>}
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
@@ -2115,7 +2263,7 @@ function EntriesTab({ cfg, entries, notes, onOpenNew, onEdit, onDelete, onToggle
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <SelectPill value={projectFilter} onChange={setProjectFilter} options={projects} placeholder="전체 프로젝트" icon={FolderKanban} />
-          <SelectPill value={categoryFilter} onChange={setCategoryFilter} options={CATEGORIES.map(c => c.id)} placeholder="전체 카테고리" icon={Code2} />
+          <SelectPill value={categoryFilter} onChange={setCategoryFilter} options={categories.map(c => c.id)} placeholder="전체 카테고리" icon={Code2} />
           <SelectPill value={importanceFilter} onChange={setImportanceFilter} options={IMPORTANCE_LEVELS.map(i => i.id)} placeholder="전체 중요도" icon={AlertTriangle} />
           <button onClick={() => setFavoriteOnly(v => !v)}
             className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-colors ${favoriteOnly ? 'border-[#E8A93B]/50 bg-[#E8A93B]/10 text-[#E8A93B]' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'}`}>
@@ -2178,7 +2326,7 @@ function EntriesTab({ cfg, entries, notes, onOpenNew, onEdit, onDelete, onToggle
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(entry => <EntryCard key={entry.id} cfg={cfg} entry={entry} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />)}
+          {filtered.map(entry => <EntryCard key={entry.id} cfg={cfg} entry={entry} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} categoryMap={categoryMap} />)}
         </div>
       )}
       </React.Fragment>
@@ -2188,6 +2336,7 @@ function EntriesTab({ cfg, entries, notes, onOpenNew, onEdit, onDelete, onToggle
         open={!!selectedDay}
         dateKey={selectedDay}
         cfg={cfg}
+        categoryMap={categoryMap}
         dayEntries={selectedDay ? (entriesByDay[selectedDay] || []) : []}
         dayNotes={selectedDay ? (notesByDay[selectedDay] || []) : []}
         onClose={() => setSelectedDay(null)}
@@ -2284,6 +2433,8 @@ function App() {
   const [todosSha, setTodosSha] = useState(null);
   const [phrases, setPhrases] = useState([]);
   const [phrasesSha, setPhrasesSha] = useState(null);
+  const [customCategories, setCustomCategories] = useState([]);
+  const [customCategoriesSha, setCustomCategoriesSha] = useState(null);
 
   // 동기화 상태
   const [loading, setLoading] = useState(false);
@@ -2327,7 +2478,7 @@ function App() {
     setLoading(true); setSyncError('');
     const cacheKey = `workjournal.cache.v1.${cfg.owner}/${cfg.repo}`;
     try {
-      const [e, q, t, p] = await Promise.all([ghGetJSON(cfg, PATH_ENTRIES), ghGetJSON(cfg, PATH_QUICK_NOTES), ghGetJSON(cfg, PATH_TODOS), ghGetJSON(cfg, PATH_PHRASES)]);
+      const [e, q, t, p, cat] = await Promise.all([ghGetJSON(cfg, PATH_ENTRIES), ghGetJSON(cfg, PATH_QUICK_NOTES), ghGetJSON(cfg, PATH_TODOS), ghGetJSON(cfg, PATH_PHRASES), ghGetJSON(cfg, PATH_CATEGORIES)]);
       const activeTag = { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch || 'main' };
       // 방금 저장에 성공했는데 GitHub 쪽에서 아직 안 보여주는 항목이 있으면 여기서 다시 붙여줌
       const reconciledEntries = reconcilePending(cfg, 'entries', e.data);
@@ -2337,11 +2488,12 @@ function App() {
       setQuickNotes(reconciledNotes.map(x => ({ ...x, _repo: activeTag, _readonly: false }))); setQuickSha(q.sha);
       setTodos(t.data); setTodosSha(t.sha);
       setPhrases(p.data); setPhrasesSha(p.sha);
+      setCustomCategories(cat.data); setCustomCategoriesSha(cat.sha);
       setLastSynced(Date.now());
       setOffline(false); setOfflineCachedAt(null);
       // 다음에 오프라인일 때 보여줄 수 있게, 성공한 결과를 이 기기에 그대로 캐시해둠
       try {
-        localStorage.setItem(cacheKey, JSON.stringify({ entries: e.data, quickNotes: q.data, todos: t.data, phrases: p.data, cachedAt: Date.now() }));
+        localStorage.setItem(cacheKey, JSON.stringify({ entries: e.data, quickNotes: q.data, todos: t.data, phrases: p.data, categories: cat.data, cachedAt: Date.now() }));
       } catch (_) { /* 저장 공간 부족 등은 무시 — 캐시는 있으면 좋은 것일 뿐 */ }
     } catch (err) {
       // 네트워크 문제로 보이면, 이 기기에 마지막으로 저장해둔 내용이라도 보여줌 (읽기 전용은 아니지만 새로 쓰기는 어차피 네트워크가 있어야 됨)
@@ -2355,6 +2507,7 @@ function App() {
           setQuickNotes((cached.quickNotes || []).map(x => ({ ...x, _repo: activeTag, _readonly: false })));
           setTodos(cached.todos || []);
           setPhrases(cached.phrases || []);
+          setCustomCategories(cached.categories || []);
           setOffline(true);
           setOfflineCachedAt(cached.cachedAt || null);
           usedCache = true;
@@ -2451,6 +2604,16 @@ function App() {
   const displayEntries = useMemo(() => (archivesLoaded ? entries.concat(archiveEntries) : entries), [entries, archiveEntries, archivesLoaded]);
   const displayNotes = useMemo(() => (archivesLoaded ? quickNotes.concat(archiveNotes) : quickNotes), [quickNotes, archiveNotes, archivesLoaded]);
   const hasArchives = !!(cfg && cfg.archives && cfg.archives.length);
+  // 일지 작성 폼의 "프로젝트명 자동완성" 후보 — 지금까지 썼던 모든 프로젝트명(활성+보관), 최근 것이 먼저 오게
+  const existingProjects = useMemo(() => {
+    const seen = new Map(); // title -> 가장 최근 updatedAt
+    displayEntries.forEach(e => {
+      if (!e.title) return;
+      const ts = e.updatedAt || e.createdAt || 0;
+      if (!seen.has(e.title) || seen.get(e.title) < ts) seen.set(e.title, ts);
+    });
+    return [...seen.entries()].sort((a, b) => b[1] - a[1]).map(([title]) => title);
+  }, [displayEntries]);
 
   /* ---------- 6. 전체 데이터 백업 ---------- */
   // 설정 화면의 "전체 데이터 백업" — 활성 레포 + 보관 레포까지 전부 새로 불러와서 JSON 파일로 내보냄.
@@ -2726,6 +2889,41 @@ function App() {
     }
   };
 
+  // 커스텀 카테고리 — 기본 5개 + 사용자가 추가한 것. id는 라벨 그대로 사용(기존 카테고리 관례랑 통일).
+  const allCategories = useMemo(() => [
+    ...CATEGORIES,
+    ...customCategories.map(c => ({ id: c.label, label: c.label, color: c.color, Icon: TagIcon })),
+  ], [customCategories]);
+  const allCategoryMap = useMemo(() => Object.fromEntries(allCategories.map(c => [c.id, c])), [allCategories]);
+
+  const handleAddCategory = async (label, color) => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    if (allCategories.some(c => c.id === trimmed)) {
+      showToast('이미 있는 카테고리예요.');
+      return;
+    }
+    try {
+      const newCats = [...customCategories, { label: trimmed, color }];
+      const newSha = await ghPutJSON(cfg, PATH_CATEGORIES, newCats, customCategoriesSha, '카테고리 추가');
+      setCustomCategories(newCats); setCustomCategoriesSha(newSha);
+    } catch (err) {
+      showToast('저장 실패: ' + err.message, () => handleAddCategory(label, color));
+    }
+  };
+  const handleDeleteCategory = async category => {
+    // 이미 이 카테고리를 쓰고 있는 일지가 있으면, 지워도 그 일지들은 그대로 옛날 값(고아 카테고리)을 들고 있게 됨 — 확인만 받음
+    const inUseCount = displayEntries.filter(e => e.category === category.label).length;
+    if (inUseCount > 0 && !window.confirm(`이 카테고리를 쓰고 있는 일지가 ${inUseCount}건 있어요. 카테고리만 삭제하고, 그 일지들의 카테고리 표시는 그대로 둘까요?`)) return;
+    try {
+      const newCats = customCategories.filter(c => c.label !== category.label);
+      const newSha = await ghPutJSON(cfg, PATH_CATEGORIES, newCats, customCategoriesSha, '카테고리 삭제');
+      setCustomCategories(newCats); setCustomCategoriesSha(newSha);
+    } catch (err) {
+      showToast('삭제 실패: ' + err.message, () => handleDeleteCategory(category));
+    }
+  };
+
   /* ---------- 11. 일지 즐겨찾기 ---------- */
   const handleToggleFavorite = async entry => {
     try {
@@ -2761,6 +2959,27 @@ function App() {
       setTodos(newTodos); setTodosSha(newSha);
     } catch (err) {
       showToast('삭제 실패: ' + err.message, () => handleDeleteTodo(todo));
+    }
+  };
+  const handleEditTodo = async (todo, changes) => {
+    try {
+      const newTodos = todos.map(t => t.id === todo.id ? { ...t, ...changes, updatedAt: Date.now() } : t);
+      const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '할 일 수정');
+      setTodos(newTodos); setTodosSha(newSha);
+    } catch (err) {
+      showToast('저장 실패: ' + err.message, () => handleEditTodo(todo, changes));
+    }
+  };
+  const handleClearDoneTodos = async () => {
+    const doneCount = todos.filter(t => t.done).length;
+    if (!doneCount) return;
+    if (!window.confirm(`완료된 할 일 ${doneCount}건을 전부 삭제할까요? 되돌릴 수 없어요.`)) return;
+    try {
+      const newTodos = todos.filter(t => !t.done);
+      const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '완료된 할 일 일괄 삭제');
+      setTodos(newTodos); setTodosSha(newSha);
+    } catch (err) {
+      showToast('삭제 실패: ' + err.message, () => handleClearDoneTodos());
     }
   };
 
@@ -2898,14 +3117,15 @@ function App() {
           ) : (
           <React.Fragment>
           {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={displayNotes} phrases={phrases} onAdd={handleAddNote} onDelete={handleDeleteNote} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDeleteNote} onEditSave={handleEditNoteSave} onPromote={handlePromote} uploading={uploading} savingEdit={savingNoteEdit} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
-          {tab === 'todos' && <TodoTab todos={todos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} />}
-          {tab === 'entries' && <EntriesTab cfg={cfg} entries={displayEntries} notes={displayNotes} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} onToggleFavorite={handleToggleFavorite} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
+          {tab === 'todos' && <TodoTab todos={todos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} onEdit={handleEditTodo} onClearDone={handleClearDoneTodos} />}
+          {tab === 'entries' && <EntriesTab cfg={cfg} entries={displayEntries} notes={displayNotes} categories={allCategories} categoryMap={allCategoryMap} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} onToggleFavorite={handleToggleFavorite} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
           {tab === 'settings' && (
             <div className="space-y-4">
               <SettingsPanel embedded initial={cfg} onSave={handleSaveConfig} onDisconnect={handleDisconnect} />
               <DataExportPanel onExport={handleExportData} exporting={exporting} />
               <RepoUsagePanel cfg={cfg} />
               <RepoArchivePanel cfg={cfg} onRotate={handleRotateRepo} />
+              <CategoryManager customCategories={customCategories} onAdd={handleAddCategory} onDelete={handleDeleteCategory} />
               <PhraseManager phrases={phrases} onAdd={handleAddPhrase} onDelete={handleDeletePhrase} />
               <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
                 <div className="flex items-center justify-between">
@@ -2933,7 +3153,7 @@ function App() {
         </div>
       </div>
 
-      <EntryFormModal open={modalOpen} initial={editingEntry} prefillNote={prefillNote} onClose={closeModal} onSave={handleSaveEntry} />
+      <EntryFormModal open={modalOpen} initial={editingEntry} prefillNote={prefillNote} existingProjects={existingProjects} categories={allCategories} onClose={closeModal} onSave={handleSaveEntry} />
       <Toast toast={toast} onRetry={() => { if (toast && toast.retry) toast.retry(); }} />
       <GlobalLightbox />
     </div>
