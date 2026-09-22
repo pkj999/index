@@ -313,15 +313,27 @@ function base64ToUtf8(b64) {
 
 async function ghFetch(cfg, path, opts = {}) {
   const url = `${GH_API}/repos/${cfg.owner}/${cfg.repo}/contents/${path}${opts.query || ''}`;
-  return fetch(url, {
-    method: opts.method || 'GET',
-    headers: {
-      Authorization: `Bearer ${cfg.token}`,
-      Accept: opts.accept || 'application/vnd.github+json',
-      ...(opts.method === 'PUT' || opts.method === 'DELETE' ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  // 네트워크가 불안정할 때 요청이 응답도 실패도 없이 무한정 걸려있는 걸 막기 위한 타임아웃
+  // (이게 없으면 "저장 중…"이 화면에서 영원히 안 사라지는 버그가 생김)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  try {
+    return await fetch(url, {
+      method: opts.method || 'GET',
+      headers: {
+        Authorization: `Bearer ${cfg.token}`,
+        Accept: opts.accept || 'application/vnd.github+json',
+        ...(opts.method === 'PUT' || opts.method === 'DELETE' ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('요청 시간이 초과됐어요. 네트워크 상태를 확인하고 다시 시도해주세요.');
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function ghGetJSON(cfg, path) {
@@ -385,9 +397,20 @@ async function ghDeleteFile(cfg, path, message) {
 }
 
 async function ghGetRepoInfo(cfg) {
-  const res = await fetch(`${GH_API}/repos/${cfg.owner}/${cfg.repo}`, {
-    headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json' },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  let res;
+  try {
+    res = await fetch(`${GH_API}/repos/${cfg.owner}/${cfg.repo}`, {
+      headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json' },
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('요청 시간이 초과됐어요.');
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!res.ok) throw new Error(`레포 정보 조회 실패 (${res.status})`);
   const json = await res.json();
   return { sizeKB: json.size || 0 }; // GitHub API가 KB 단위로 보고 (실제 반영까지 약간의 지연 있을 수 있음)
