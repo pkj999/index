@@ -186,6 +186,9 @@ const DatabaseIcon = mkIcon('database');
 /* ===========================================================
    상수
 =========================================================== */
+// 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
+// index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
+const APP_VERSION = 'v5 · 2026-09-22';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -2155,6 +2158,50 @@ function EntriesTab({ cfg, entries, notes, onOpenNew, onEdit, onDelete, onToggle
 /* ===========================================================
    App 루트
 =========================================================== */
+/* ===========================================================
+   저장 직후 "아직 반영 지연" 방지용 캐시
+   — GitHub Contents API는 커밋 자체는 바로 끝나도, 그 직후 다시 읽었을 때
+     몇 초~몇 분 정도 예전 내용을 돌려주는 지연(읽기 일관성 지연)이 있을 수 있음.
+     그래서 "방금 내가 저장에 성공한 항목"은 짧은 시간 동안 로컬에도 따로 기억해뒀다가,
+     새로고침해서 받아온 데이터에 아직 안 보이면 계속 화면에 붙여서 보여줌
+     (실제로 GitHub에 반영되면 자연스럽게 정상 데이터로 교체됨).
+=========================================================== */
+const PENDING_KEY_PREFIX = 'workjournal.pending.';
+const PENDING_GRACE_MS = 5 * 60 * 1000; // 5분 지나면 포기하고 정상 데이터만 믿음
+
+function pendingKeyFor(cfg) { return `${PENDING_KEY_PREFIX}${cfg.owner}/${cfg.repo}`; }
+function readPending(cfg) {
+  try {
+    const raw = localStorage.getItem(pendingKeyFor(cfg));
+    const parsed = raw ? JSON.parse(raw) : null;
+    return { entries: (parsed && parsed.entries) || [], notes: (parsed && parsed.notes) || [] };
+  } catch (_) { return { entries: [], notes: [] }; }
+}
+function writePending(cfg, pending) {
+  try { localStorage.setItem(pendingKeyFor(cfg), JSON.stringify(pending)); } catch (_) { /* 저장 공간 문제는 무시 */ }
+}
+// 쓰기가 성공한 직후 호출 — 이 항목을 "아직 반영 안 됐을 수도 있는 것" 목록에 등록
+function markPending(cfg, kind, item) {
+  const pending = readPending(cfg);
+  const now = Date.now();
+  const list = kind === 'entries' ? pending.entries : pending.notes;
+  const kept = list.filter(p => now - p.addedAt < PENDING_GRACE_MS);
+  kept.push({ id: item.id, item, addedAt: now });
+  pending[kind] = kept;
+  writePending(cfg, pending);
+}
+// loadAll에서 방금 새로 받아온 데이터와 대조해서, 아직 안 보이는 대기 항목을 앞쪽에 이어붙임 (+ 정리)
+function reconcilePending(cfg, kind, freshData) {
+  const pending = readPending(cfg);
+  const now = Date.now();
+  const freshIds = new Set(freshData.map(x => x.id));
+  const list = pending[kind] || [];
+  const stillWaiting = list.filter(p => now - p.addedAt < PENDING_GRACE_MS && !freshIds.has(p.id));
+  pending[kind] = stillWaiting; // 이미 반영됐거나 유예시간 지난 건 정리
+  writePending(cfg, pending);
+  return stillWaiting.length ? [...stillWaiting.map(p => p.item), ...freshData] : freshData;
+}
+
 function App() {
   // App 컴포넌트 구조 안내 (수정할 때 참고용 목차)
   //  1. 상태(state) 선언
@@ -2240,9 +2287,12 @@ function App() {
     try {
       const [e, q, t, p] = await Promise.all([ghGetJSON(cfg, PATH_ENTRIES), ghGetJSON(cfg, PATH_QUICK_NOTES), ghGetJSON(cfg, PATH_TODOS), ghGetJSON(cfg, PATH_PHRASES)]);
       const activeTag = { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch || 'main' };
+      // 방금 저장에 성공했는데 GitHub 쪽에서 아직 안 보여주는 항목이 있으면 여기서 다시 붙여줌
+      const reconciledEntries = reconcilePending(cfg, 'entries', e.data);
+      const reconciledNotes = reconcilePending(cfg, 'notes', q.data);
       // 활성 레포만 불러옴 — 보관 레포는 사용자가 "지난 기록 보기"를 눌렀을 때만 따로 불러온다 (loadArchives)
-      setEntries(e.data.map(x => ({ ...x, _repo: activeTag, _readonly: false }))); setEntriesSha(e.sha);
-      setQuickNotes(q.data.map(x => ({ ...x, _repo: activeTag, _readonly: false }))); setQuickSha(q.sha);
+      setEntries(reconciledEntries.map(x => ({ ...x, _repo: activeTag, _readonly: false }))); setEntriesSha(e.sha);
+      setQuickNotes(reconciledNotes.map(x => ({ ...x, _repo: activeTag, _readonly: false }))); setQuickSha(q.sha);
       setTodos(t.data); setTodosSha(t.sha);
       setPhrases(p.data); setPhrasesSha(p.sha);
       setLastSynced(Date.now());
@@ -2533,10 +2583,13 @@ function App() {
       const newNote = { id: uid(), text, imageRefs, processed: false, linkedEntryId: null, createdAt: Date.now(), _repo: activeTag, _readonly: false };
       const newNotes = [newNote, ...quickNotes];
       await writeActiveNotes(newNotes, '빠른 기록 추가');
+      markPending(cfg, 'notes', newNote); // GitHub 읽기 반영 지연 대비 — 새로고침해도 잠깐 안 사라지게
       setQuickNotes(newNotes);
       showToast('기록했습니다.');
     } catch (err) {
       showToast('저장 실패: ' + err.message, () => handleAddNote(text, files));
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -2598,6 +2651,8 @@ function App() {
       showToast(note._readonly ? '보관 레포에 저장했습니다.' : '수정했습니다.');
     } catch (err) {
       showToast('수정 실패: ' + err.message, () => handleEditNoteSave(note, newText, keepImages, newFiles));
+    } finally {
+      setSavingNoteEdit(false);
     }
   };
 
@@ -2701,6 +2756,7 @@ function App() {
       } else {
         const newEntries = [newEntry, ...entries];
         await writeActiveEntries(newEntries, prefillNote ? '빠른 기록에서 일지 작성' : '새 일지 작성');
+        markPending(cfg, 'entries', newEntry); // GitHub 읽기 반영 지연 대비
         setEntries(newEntries);
       }
 
@@ -2818,6 +2874,7 @@ function App() {
                   이 앱을 열어뒀을 때만 뜨는 알림이에요. 폰이 잠겨있거나 앱을 닫았을 때 울리는 진짜 알람은 아닙니다.
                 </p>
               </div>
+              <p className="text-center text-[10.5px] font-mono text-slate-300 dark:text-slate-700 pt-1">업무일지 {APP_VERSION}</p>
             </div>
           )}
           </React.Fragment>
