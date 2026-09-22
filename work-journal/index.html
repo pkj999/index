@@ -61,6 +61,12 @@
   .wj-modal-pop { animation: wj-pop 0.18s ease both; }
   @keyframes wj-spin { to { transform: rotate(360deg); } }
   .wj-spin { animation: wj-spin 0.8s linear infinite; }
+  @keyframes wj-check-bounce { 0% { transform: scale(1); } 45% { transform: scale(1.35); } 100% { transform: scale(1); } }
+  .wj-check-bounce { animation: wj-check-bounce 0.38s cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes wj-item-leave { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.94); } }
+  .wj-item-leaving { animation: wj-item-leave 0.22s ease forwards; }
+  @keyframes wj-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .wj-sheet-up { animation: wj-sheet-up 0.25s cubic-bezier(.32,.72,0,1) both; }
 
   textarea, input, select { font-family: inherit; }
   textarea:focus, input:focus, select:focus { outline: none; }
@@ -104,6 +110,7 @@ const ICON_PATHS = {
   key: '<path d="m2 21 9.6-9.6"/><path d="m7.5 15.5 2.3 2.3a1 1 0 0 1 0 1.4l-2.1 2.1a1 1 0 0 1-1.4 0L4 19"/><circle cx="15.5" cy="7.5" r="5.5"/>',
   'refresh-cw': '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   'circle-check-big': '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+  database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>',
   circle: '<circle cx="12" cy="12" r="10"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
@@ -174,6 +181,7 @@ const TrashIcon = mkIcon('trash');
 const Undo2 = mkIcon('undo-2');
 const CalendarPlus = mkIcon('calendar-plus');
 const Quote = mkIcon('quote');
+const DatabaseIcon = mkIcon('database');
 
 /* ===========================================================
    상수
@@ -232,6 +240,35 @@ function daysUntil(dateStr) {
   return Math.round((target - today) / 86400000);
 }
 
+// Date 객체 → 'YYYY-MM-DD' (달력에서 날짜별로 기록을 묶을 때 사용)
+function dateKeyFromDate(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// 달력 그리드용 — 해당 연/월(month는 0부터 시작)을 앞뒤 빈 칸까지 포함해 7일씩 묶은 주 배열로 반환
+function buildCalendarWeeks(year, month) {
+  const firstOfMonth = new Date(year, month, 1);
+  const startDay = firstOfMonth.getDay(); // 0=일요일
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+  const cells = [];
+  for (let i = startDay - 1; i >= 0; i--) {
+    cells.push({ date: new Date(year, month - 1, daysInPrevMonth - i), inMonth: false });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ date: new Date(year, month, d), inMonth: true });
+  }
+  while (cells.length % 7 !== 0) {
+    const last = cells[cells.length - 1].date;
+    const next = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1);
+    cells.push({ date: next, inMonth: false });
+  }
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+
 function downloadICS(title, dateStr) {
   if (!dateStr) return;
   const dt = dateStr.replace(/-/g, '');
@@ -281,7 +318,7 @@ async function ghFetch(cfg, path, opts = {}) {
     headers: {
       Authorization: `Bearer ${cfg.token}`,
       Accept: opts.accept || 'application/vnd.github+json',
-      ...(opts.method === 'PUT' ? { 'Content-Type': 'application/json' } : {}),
+      ...(opts.method === 'PUT' || opts.method === 'DELETE' ? { 'Content-Type': 'application/json' } : {}),
     },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
@@ -326,6 +363,77 @@ async function ghPutImage(cfg, path, base64Content, message) {
   return path;
 }
 
+/* ===========================================================
+   다중 레포(보관/archive) 헬퍼
+   — 레포를 전환(로테이션)해도 예전 레포를 읽기 전용으로 함께 보여주고,
+     예외적으로 수정할 때는 그 항목이 원래 있던 레포에만 정확히 다시 쓰기 위한 유틸들
+=========================================================== */
+async function ghDeleteFile(cfg, path, message) {
+  // 삭제하려면 현재 파일의 sha가 필요해서 먼저 조회
+  const getRes = await ghFetch(cfg, path, { query: `?ref=${cfg.branch || 'main'}` });
+  if (getRes.status === 404) return; // 이미 없음 — 조용히 넘어감
+  if (!getRes.ok) throw new Error(`파일 조회 실패 (${getRes.status})`);
+  const json = await getRes.json();
+  const res = await ghFetch(cfg, path, {
+    method: 'DELETE',
+    body: { message: message || `delete ${path}`, sha: json.sha, branch: cfg.branch || 'main' },
+  });
+  if (!res.ok && res.status !== 404) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `파일 삭제 실패 (${res.status})`);
+  }
+}
+
+async function ghGetRepoInfo(cfg) {
+  const res = await fetch(`${GH_API}/repos/${cfg.owner}/${cfg.repo}`, {
+    headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) throw new Error(`레포 정보 조회 실패 (${res.status})`);
+  const json = await res.json();
+  return { sizeKB: json.size || 0 }; // GitHub API가 KB 단위로 보고 (실제 반영까지 약간의 지연 있을 수 있음)
+}
+
+// 보관된(archive) 레포 정보로 접근할 때 쓸 cfg를 만들어줌 (토큰은 공유, owner/repo/branch만 교체)
+function repoCfgFor(cfg, repoTag) {
+  if (!repoTag) return cfg;
+  return { ...cfg, owner: repoTag.owner, repo: repoTag.repo, branch: repoTag.branch || 'main' };
+}
+function repoKeyOf(repoTag) {
+  return repoTag ? `${repoTag.owner}/${repoTag.repo}` : '';
+}
+// 레코드에 붙여둔 _repo/_readonly/_repoLabel 태그는 앱 내부 표시용이라, 실제 저장 전엔 반드시 제거
+function stripMeta(item) {
+  const { _repo, _readonly, _repoLabel, ...rest } = item;
+  return rest;
+}
+
+// entries/quickNotes 전체를 훑어서 현재 사용 중인 이미지 경로 집합을 만듦.
+// (opts로 지금 삭제하려는 항목 자신은 제외하고 계산)
+function collectImagePaths(entriesArr, notesArr, opts = {}) {
+  const set = new Set();
+  (entriesArr || []).forEach(e => {
+    if (opts.excludeEntryId && e.id === opts.excludeEntryId) return;
+    (e.images || []).forEach(r => { if (r && r.thumb) set.add(r.thumb); if (r && r.original) set.add(r.original); });
+  });
+  (notesArr || []).forEach(n => {
+    if (opts.excludeNoteId && n.id === opts.excludeNoteId) return;
+    (n.imageRefs || []).forEach(r => { if (r && r.thumb) set.add(r.thumb); if (r && r.original) set.add(r.original); });
+  });
+  return set;
+}
+
+// imageRefs 중 다른 곳에서 더 이상 참조하지 않는 것만 실제로 레포에서 삭제.
+// 개별 파일 삭제가 실패해도 나머지는 계속 진행 (사진 삭제 실패로 전체 작업이 막히지 않도록).
+async function deleteOrphanedImages(cfg, imageRefs, inUseSet, messagePrefix) {
+  for (const ref of (imageRefs || [])) {
+    for (const p of [ref && ref.thumb, ref && ref.original]) {
+      if (p && !inUseSet.has(p)) {
+        try { await ghDeleteFile(cfg, p, `${messagePrefix} (사진 정리): ${p}`); } catch (e) { /* 개별 실패는 무시하고 계속 */ }
+      }
+    }
+  }
+}
+
 async function ghGetImageBlobUrl(cfg, path) {
   const res = await ghFetch(cfg, path, { query: `?ref=${cfg.branch || 'main'}`, accept: 'application/vnd.github.raw+json' });
   if (!res.ok) throw new Error('이미지 로드 실패');
@@ -345,6 +453,9 @@ async function ghTestConnection(cfg) {
   return true;
 }
 
+/* ===========================================================
+   이미지 파일 처리 유틸 (압축, base64 변환 등)
+=========================================================== */
 function compressImage(file, maxSize = 1600, quality = 0.72) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -527,11 +638,16 @@ function ImportanceMeter({ level, showLabel = true }) {
   );
 }
 
-function Toast({ message }) {
-  if (!message) return null;
+function Toast({ toast, onRetry }) {
+  if (!toast || !toast.msg) return null;
   return (
-    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] px-4 py-2.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-slate-100 dark:text-slate-900 text-[13px] font-medium shadow-xl wj-modal-pop max-w-[90vw] text-center">
-      {message}
+    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 px-4 py-2.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-slate-100 dark:text-slate-900 text-[13px] font-medium shadow-xl wj-modal-pop max-w-[90vw] text-center">
+      <span>{toast.msg}</span>
+      {toast.retry && (
+        <button onClick={onRetry} className="shrink-0 inline-flex items-center gap-1 text-[12px] font-semibold underline underline-offset-2">
+          <RefreshCw size={11} /> 다시 시도
+        </button>
+      )}
     </div>
   );
 }
@@ -678,6 +794,194 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
   );
 }
 
+const REPO_SIZE_MAX_MB = 1024;   // GitHub 권장 상한(약 1GB)
+const REPO_SIZE_WARN_MB = 800;   // 이 이상이면 경고 표시
+
+// 설정 탭 — 활성 레포의 GitHub 용량(size)을 보여주는 카드 (1GB 권장 상한 기준 경고 표시)
+function RepoUsagePanel({ cfg }) {
+  const [sizeKB, setSizeKB] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const info = await ghGetRepoInfo(cfg);
+      setSizeKB(info.sizeKB);
+    } catch (err) {
+      setError(err.message || '조회 실패');
+    } finally {
+      setLoading(false);
+    }
+  }, [cfg]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const usedMB = sizeKB != null ? sizeKB / 1024 : null;
+  const pct = usedMB != null ? Math.min(100, (usedMB / REPO_SIZE_MAX_MB) * 100) : 0;
+  const isWarn = usedMB != null && usedMB >= REPO_SIZE_WARN_MB;
+  const barColor = isWarn ? '#F0654A' : '#45C4B0';
+
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300">
+          <DatabaseIcon size={14} /> 데이터 레포 용량
+        </div>
+        <button onClick={load} disabled={loading} title="새로고침"
+          className="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all disabled:opacity-50">
+          <RefreshCw size={12.5} className={loading ? 'wj-spin' : ''} />
+        </button>
+      </div>
+
+      {error ? (
+        <p className="text-[11px] text-red-400">{error}</p>
+      ) : usedMB == null ? (
+        <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 animate-pulse" />
+      ) : (
+        <React.Fragment>
+          <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
+          </div>
+          <div className="flex items-center justify-between mt-1.5">
+            <span className="text-[11.5px] font-mono text-slate-500 dark:text-slate-400">
+              {usedMB < 1 ? `${sizeKB} KB` : `${usedMB.toFixed(1)} MB`} / {REPO_SIZE_MAX_MB} MB
+            </span>
+            <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">{pct.toFixed(1)}%</span>
+          </div>
+          {isWarn && (
+            <div className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-500">
+              <AlertTriangle size={13} className="shrink-0 mt-[1px]" />
+              <span>용량이 {REPO_SIZE_WARN_MB}MB를 넘었어요. 새 데이터 레포로 옮길 준비를 해두는 게 좋아요.</span>
+            </div>
+          )}
+          <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
+            GitHub이 집계한 값이라 실제 반영까지 약간 지연될 수 있어요.
+          </p>
+        </React.Fragment>
+      )}
+    </div>
+  );
+}
+
+function DataExportPanel({ onExport, exporting }) {
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300">
+          <Download size={14} /> 전체 데이터 백업
+        </div>
+        <button onClick={onExport} disabled={exporting}
+          className="shrink-0 inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-[#45C4B0] text-[#1a1206] hover:brightness-105 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all">
+          {exporting ? <LoaderCircle size={12} className="wj-spin" /> : <Download size={12} />}
+          {exporting ? '내보내는 중…' : 'JSON으로 내보내기'}
+        </button>
+      </div>
+      <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
+        일지·빠른 기록·할 일·문구를 보관된 레포까지 전부 포함해서 파일로 저장해요. 사진 원본은 포함되지 않아요(레포에 그대로 남아있어요) — GitHub 쪽에 문제가 생겼을 때를 대비한 비상용 백업이니 가끔 한 번씩 받아두시는 걸 추천해요.
+      </p>
+    </div>
+  );
+}
+
+// 설정 탭 — 보관된 레포 목록 표시 + 새 데이터 레포로 전환(로테이션)하는 폼
+function RepoArchivePanel({ cfg, onRotate }) {
+  const [expanded, setExpanded] = useState(false);
+  const [newRepo, setNewRepo] = useState('');
+  const [newBranch, setNewBranch] = useState('main');
+  const [label, setLabel] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState(null);
+  const [verified, setVerified] = useState(false);
+
+  const archives = cfg.archives || [];
+  const invalidate = () => { setVerified(false); setTestMsg(null); };
+
+  const handleTest = async () => {
+    if (!newRepo.trim()) return;
+    setTesting(true); setTestMsg(null); setVerified(false);
+    try {
+      await ghTestConnection({ owner: cfg.owner, repo: newRepo.trim(), branch: newBranch.trim() || 'main', token: cfg.token });
+      setTestMsg({ ok: true, msg: '연결 성공! 이 레포로 전환할 수 있어요.' });
+      setVerified(true);
+    } catch (err) {
+      setTestMsg({ ok: false, msg: err.message });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleRotate = () => {
+    if (!verified) return;
+    if (!window.confirm(`지금 레포를 "${newRepo.trim()}"(으)로 전환할까요?\n\n현재 레포(${cfg.repo})는 보관 처리되어 계속 읽을 수 있고, 앞으로 새로 쓰는 기록만 새 레포에 저장돼요.`)) return;
+    const archivedEntry = { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch || 'main', label: label.trim() || cfg.repo, archivedAt: Date.now() };
+    onRotate({ ...cfg, repo: newRepo.trim(), branch: newBranch.trim() || 'main', archives: [archivedEntry, ...archives] });
+    setNewRepo(''); setLabel(''); setVerified(false); setTestMsg(null); setExpanded(false);
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
+      <button onClick={() => setExpanded(v => !v)} className="w-full flex items-center justify-between text-[13px] text-slate-600 dark:text-slate-300">
+        <span className="flex items-center gap-2"><DatabaseIcon size={14} /> 데이터 레포 관리{archives.length > 0 ? ` (보관 ${archives.length}개)` : ''}</span>
+        <ChevronDown size={14} className={expanded ? 'rotate-180 transition-transform' : 'transition-transform'} />
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-4">
+          <div>
+            <p className="text-[11.5px] text-slate-500 dark:text-slate-400 mb-1.5">
+              현재 쓰는 중: <span className="font-mono text-slate-700 dark:text-slate-200">{cfg.owner}/{cfg.repo}</span>
+            </p>
+            {archives.length > 0 && (
+              <div className="space-y-1 mt-2">
+                {archives.map((a, i) => (
+                  <a key={i} href={`https://github.com/${a.owner}/${a.repo}`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center justify-between text-[11.5px] px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+                    <span className="font-mono truncate">{a.owner}/{a.repo}</span>
+                    <span className="text-slate-400 dark:text-slate-600 shrink-0 ml-2">보관됨 · {a.label}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+            <p className="text-[11.5px] font-medium text-slate-600 dark:text-slate-300 mb-2">새 데이터 레포로 전환</p>
+            <p className="text-[10.5px] text-slate-400 dark:text-slate-500 leading-relaxed mb-2.5">
+              GitHub에서 새 비공개 레포를 먼저 만들고(README 포함), 지금 쓰는 토큰의 "레포 접근" 목록에 그 레포도 추가해주세요. 그다음 아래에 이름을 입력하고 연결 테스트 후 전환하면 돼요. 전환해도 지금 레포는 그대로 남고, 목록에서 계속 읽기 전용으로 보여요.
+            </p>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <input value={newRepo} onChange={e => { setNewRepo(e.target.value); invalidate(); }} placeholder="새 레포 이름"
+                className="min-w-0 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+              <input value={newBranch} onChange={e => { setNewBranch(e.target.value); invalidate(); }} placeholder="main"
+                className="min-w-0 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+            </div>
+            <input value={label} onChange={e => setLabel(e.target.value)} placeholder="지금 레포에 붙일 라벨 (예: 2026-09, 비워두면 레포 이름 사용)"
+              className="w-full min-w-0 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 mb-2" />
+
+            {testMsg && (
+              <div className={`text-[11px] px-2.5 py-1.5 rounded-md mb-2 leading-relaxed ${testMsg.ok ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-400'}`}>{testMsg.msg}</div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button onClick={handleTest} disabled={!newRepo.trim() || testing}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 transition-all">
+                {testing ? <LoaderCircle size={12} className="wj-spin" /> : <Link2 size={12} />} 연결 테스트
+              </button>
+              <button onClick={handleRotate} disabled={!verified}
+                title={!verified ? '먼저 연결 테스트를 통과해야 전환할 수 있어요' : ''}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-[#45C4B0] text-[#1a1206] hover:brightness-105 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 transition-all">
+                <ArrowRight size={12} /> 이 레포로 전환
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PhraseManager({ phrases, onAdd, onDelete }) {
   const [text, setText] = useState('');
   const handleAdd = () => {
@@ -801,11 +1105,66 @@ function NoteEditModal({ open, note, cfg, onClose, onSave, saving }) {
   );
 }
 
-function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPermanentDelete, onEditSave, onPromote, uploading, savingEdit }) {
+// 스와이프해서 삭제 — 모바일 터치로 왼쪽으로 밀면 삭제, 데스크탑에선 그냥 감싸기만 함 (기존 삭제 버튼은 그대로 유지)
+function SwipeToDelete({ onDelete, disabled, children }) {
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startRef = useRef(null);
+  const axisRef = useRef(null);
+  const THRESHOLD = -84;
+
+  const onTouchStart = e => {
+    if (disabled) return;
+    const t = e.touches[0];
+    startRef.current = { x: t.clientX, y: t.clientY };
+    axisRef.current = null;
+    setDragging(true);
+  };
+  const onTouchMove = e => {
+    if (disabled || !startRef.current) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startRef.current.x;
+    const dy = t.clientY - startRef.current.y;
+    if (!axisRef.current) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      axisRef.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    if (axisRef.current === 'x') setDragX(Math.max(-110, Math.min(0, dx)));
+  };
+  const onTouchEnd = () => {
+    if (disabled || !startRef.current) return;
+    setDragging(false);
+    if (dragX <= THRESHOLD) onDelete();
+    setDragX(0);
+    startRef.current = null;
+    axisRef.current = null;
+  };
+
+  return (
+    <div className="relative">
+      <div className="absolute inset-0 rounded-xl flex items-center justify-end pr-5 bg-red-500 text-white">
+        <Trash2 size={17} />
+      </div>
+      <div
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+        style={{ transform: `translateX(${dragX}px)`, transition: dragging ? 'none' : 'transform 0.2s ease' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPermanentDelete, onEditSave, onPromote, uploading, savingEdit, hasArchives, archivesLoaded, archiveLoading, onLoadArchives }) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
   const [showTrash, setShowTrash] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
+  const [leavingNoteId, setLeavingNoteId] = useState(null);
+
+  const handleDeleteAnimated = note => {
+    setLeavingNoteId(note.id);
+    setTimeout(() => { onDelete(note); setLeavingNoteId(null); }, 220);
+  };
   const fileInputRef = useRef(null);
 
   const handleFiles = e => {
@@ -880,6 +1239,14 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
         </div>
       </div>
 
+      {hasArchives && !archivesLoaded && (
+        <button onClick={onLoadArchives} disabled={archiveLoading}
+          className="flex items-center justify-center gap-1.5 text-[12px] font-medium px-3 py-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 disabled:opacity-50 transition-all">
+          {archiveLoading ? <LoaderCircle size={13} className="wj-spin" /> : <DatabaseIcon size={13} />}
+          {archiveLoading ? '보관된 레포 불러오는 중…' : '보관된 레포의 지난 기록도 함께 보기'}
+        </button>
+      )}
+
       {(active.length > 0 || trashed.length > 0) && (
         <div className="flex items-center justify-between px-0.5">
           <span className="text-[11.5px] text-slate-400 dark:text-slate-500 font-mono">
@@ -897,10 +1264,15 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
           <div className="text-center py-14 text-slate-400 dark:text-slate-500 text-[13px]">휴지통이 비어 있습니다.</div>
         ) : (
           <div className="space-y-2.5">
-            {trashed.map(note => (
+            {trashed.map(note => {
+              const readonly = !!note._readonly;
+              return (
               <div key={note.id} className="wj-enter rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-3.5 opacity-80">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[10.5px] font-mono text-slate-400 dark:text-slate-500">삭제됨 · {fmtDateShort((note.deletedAt ? new Date(note.deletedAt) : new Date()).toISOString().slice(0, 10))}</span>
+                  <span className="text-[10.5px] font-mono text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                    삭제됨 · {fmtDateShort((note.deletedAt ? new Date(note.deletedAt) : new Date()).toISOString().slice(0, 10))}
+                    {readonly && <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500">보관 레포</span>}
+                  </span>
                   <div className="flex items-center gap-1">
                     <button onClick={() => onRestore(note)} title="복원" className="p-1 rounded text-slate-400 dark:text-slate-500 hover:text-[#45C4B0] active:scale-90 transition-all"><Undo2 size={13} /></button>
                     <button onClick={() => onPermanentDelete(note)} title="영구 삭제" className="p-1 rounded text-slate-400 dark:text-slate-500 hover:text-red-500 active:scale-90 transition-all"><Trash2 size={13} /></button>
@@ -908,7 +1280,8 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
                 </div>
                 {note.text && <p className="text-[13px] text-slate-500 dark:text-slate-400 leading-relaxed mt-1.5 line-clamp-2 break-words">{note.text}</p>}
               </div>
-            ))}
+              );
+            })}
           </div>
         )
       ) : active.length === 0 ? (
@@ -917,17 +1290,26 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
         </div>
       ) : (
         <div className="space-y-2.5">
-          {active.map(note => (
-            <div key={note.id} className="wj-enter rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3.5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+          {active.map(note => {
+            const readonly = !!note._readonly;
+            const imgCfg = repoCfgFor(cfg, note._repo);
+            return (
+            <SwipeToDelete key={note.id} disabled={readonly} onDelete={() => handleDeleteAnimated(note)}>
+            <div className={`wj-enter rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3.5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors ${leavingNoteId === note.id ? 'wj-item-leaving' : ''}`}>
               <div className="flex items-start justify-between gap-2">
-                <span className="text-[10.5px] font-mono text-slate-400 dark:text-slate-500">
+                <span className="text-[10.5px] font-mono text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
                   {fmtDateShort((note.createdAt ? new Date(note.createdAt) : new Date()).toISOString().slice(0, 10))} {fmtTime(note.createdAt)}
+                  {readonly && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500" title={note._repoLabel ? `보관 레포: ${note._repoLabel}` : '보관 레포'}>
+                      보관 레포
+                    </span>
+                  )}
                 </span>
                 <div className="flex items-center gap-1">
                   <button onClick={() => setEditingNote(note)} title="수정" className="p-1 rounded text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 active:scale-90 transition-all">
                     <Pencil size={13} />
                   </button>
-                  <button onClick={() => onDelete(note)} title="삭제" className="p-1 rounded text-slate-300 dark:text-slate-600 hover:text-red-500 active:scale-90 transition-all">
+                  <button onClick={() => handleDeleteAnimated(note)} title="삭제" className="p-1 rounded text-slate-300 dark:text-slate-600 hover:text-red-500 active:scale-90 transition-all">
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -937,7 +1319,7 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
                 <div className="flex items-center gap-2 flex-wrap mt-2.5">
                   {note.imageRefs.map((ref, i) => {
                     const { thumb, original } = imgPaths(ref);
-                    return <GhImage key={thumb + i} cfg={cfg} path={thumb} originalPath={original} className="w-16 h-16 rounded-md object-cover border border-slate-200 dark:border-slate-700" />;
+                    return <GhImage key={thumb + i} cfg={imgCfg} path={thumb} originalPath={original} className="w-16 h-16 rounded-md object-cover border border-slate-200 dark:border-slate-700" />;
                   })}
                 </div>
               )}
@@ -954,11 +1336,13 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
                 )}
               </div>
             </div>
-          ))}
+            </SwipeToDelete>
+            );
+          })}
         </div>
       )}
 
-      <NoteEditModal open={!!editingNote} note={editingNote} cfg={cfg} onClose={() => setEditingNote(null)} onSave={handleEditSave} saving={savingEdit} />
+      <NoteEditModal open={!!editingNote} note={editingNote} cfg={editingNote ? repoCfgFor(cfg, editingNote._repo) : cfg} onClose={() => setEditingNote(null)} onSave={handleEditSave} saving={savingEdit} />
     </div>
   );
 }
@@ -970,6 +1354,16 @@ function TodoTab({ todos, onAdd, onToggle, onDelete }) {
   const [text, setText] = useState('');
   const [due, setDue] = useState('');
   const [showDone, setShowDone] = useState(false);
+  const [completingId, setCompletingId] = useState(null);
+
+  const handleToggleAnimated = t => {
+    if (t.done) { onToggle(t); return; } // 완료 취소는 바로 처리
+    setCompletingId(t.id);
+    setTimeout(() => {
+      onToggle(t);
+      setCompletingId(null);
+    }, 260);
+  };
 
   const { pending, done, overdueCount, todayCount } = useMemo(() => {
     const p = todos.filter(t => !t.done).sort((a, b) => (a.due || '9999-99-99').localeCompare(b.due || '9999-99-99'));
@@ -1024,9 +1418,10 @@ function TodoTab({ todos, onAdd, onToggle, onDelete }) {
               else badge = { txt: `D-${diff}`, cls: 'text-slate-400 bg-slate-100 dark:bg-slate-800' };
             }
             return (
-              <div key={t.id} className="flex items-center gap-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2.5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
-                <button onClick={() => onToggle(t)} className="text-slate-300 dark:text-slate-600 hover:text-[#45C4B0] active:scale-90 transition-all shrink-0">
-                  <CircleIcon size={18} />
+              <div key={t.id} className={`flex items-center gap-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2.5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors ${completingId === t.id ? 'wj-item-leaving' : ''}`}>
+                <button onClick={() => handleToggleAnimated(t)} disabled={completingId === t.id}
+                  className={`shrink-0 transition-all active:scale-90 ${completingId === t.id ? 'text-emerald-500 wj-check-bounce' : 'text-slate-300 dark:text-slate-600 hover:text-[#45C4B0]'}`}>
+                  {completingId === t.id ? <CircleCheckBig size={18} /> : <CircleIcon size={18} />}
                 </button>
                 <span className="flex-1 min-w-0 text-[13.5px] text-slate-700 dark:text-slate-200 break-words">{t.text}</span>
                 {badge && <span className={`text-[10.5px] font-mono px-1.5 py-0.5 rounded shrink-0 ${badge.cls}`}>{badge.txt}</span>}
@@ -1109,8 +1504,16 @@ function SelectPill({ value, onChange, options, placeholder, icon: Ico }) {
 
 function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite }) {
   const [expanded, setExpanded] = useState(false);
+  const [favBounce, setFavBounce] = useState(false);
   const meta = CATEGORY_MAP[entry.category] || CATEGORY_MAP['기타'];
   const hasMore = (entry.problem && entry.problem.length > 90) || (entry.solution && entry.solution.length > 90);
+  const readonly = !!entry._readonly;
+  const imgCfg = repoCfgFor(cfg, entry._repo);
+  const handleFavClick = () => {
+    setFavBounce(true);
+    setTimeout(() => setFavBounce(false), 380);
+    onToggleFavorite(entry);
+  };
   return (
     <div className="wj-enter group relative flex rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md hover:shadow-slate-200/50 dark:hover:shadow-black/20 transition-all">
       <div className="w-[3px] shrink-0" style={{ background: meta.color }} />
@@ -1123,12 +1526,17 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite }) {
               <span className="font-mono text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
                 <Calendar size={11} /> {fmtDateShort(entry.date)}
               </span>
+              {readonly && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500" title={entry._repoLabel ? `보관 레포: ${entry._repoLabel}` : '보관 레포'}>
+                  보관 레포
+                </span>
+              )}
             </div>
             <h3 className="text-[15px] font-semibold text-slate-800 dark:text-slate-100 leading-snug break-words">{entry.title || '(제목 없음)'}</h3>
           </div>
           <div className="flex items-center gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
-            <button onClick={() => onToggleFavorite(entry)} title={entry.favorite ? '즐겨찾기 해제' : '즐겨찾기'}
-              className={`p-1.5 rounded-md active:scale-90 transition-all ${entry.favorite ? 'text-[#E8A93B]' : 'text-slate-400 dark:text-slate-500 hover:text-[#E8A93B]'} hover:bg-slate-100 dark:hover:bg-slate-800`}>
+            <button onClick={handleFavClick} title={entry.favorite ? '즐겨찾기 해제' : '즐겨찾기'}
+              className={`p-1.5 rounded-md active:scale-90 transition-all ${entry.favorite ? 'text-[#E8A93B]' : 'text-slate-400 dark:text-slate-500 hover:text-[#E8A93B]'} hover:bg-slate-100 dark:hover:bg-slate-800 ${favBounce ? 'wj-check-bounce' : ''}`}>
               <Star size={14} fill={entry.favorite ? '#E8A93B' : 'none'} />
             </button>
             <button onClick={() => onEdit(entry)} className="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all"><Pencil size={14} /></button>
@@ -1178,7 +1586,7 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite }) {
           <div className="flex items-center gap-2 flex-wrap mt-3">
             {entry.images.map((ref, i) => {
               const { thumb, original } = imgPaths(ref);
-              return <GhImage key={thumb + i} cfg={cfg} path={thumb} originalPath={original} className="w-14 h-14 rounded-md object-cover border border-slate-200 dark:border-slate-700" />;
+              return <GhImage key={thumb + i} cfg={imgCfg} path={thumb} originalPath={original} className="w-14 h-14 rounded-md object-cover border border-slate-200 dark:border-slate-700" />;
             })}
           </div>
         )}
@@ -1426,13 +1834,171 @@ function SummaryPanel({ entries }) {
   );
 }
 
-function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete, onToggleFavorite }) {
+// 달력 한 칸 — 일지는 틸 점, 빠른 기록은 회색 점으로 그날 기록 유무만 표시
+function MonthCalendar({ year, month, entriesByDay, notesByDay, selectedDay, onSelectDay }) {
+  const weeks = useMemo(() => buildCalendarWeeks(year, month), [year, month]);
+  const todayKey = todayStr();
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3">
+      <div className="grid grid-cols-7 mb-1.5">
+        {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
+          <div key={d} className={`text-center text-[10.5px] font-medium py-1 ${i === 0 ? 'text-[#F0654A]/70' : i === 6 ? 'text-[#5B9DF9]/70' : 'text-slate-400 dark:text-slate-500'}`}>{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-y-1">
+        {weeks.flat().map((cell, i) => {
+          const key = dateKeyFromDate(cell.date);
+          const dayEntries = entriesByDay[key] || [];
+          const dayNotes = notesByDay[key] || [];
+          const hasAny = dayEntries.length > 0 || dayNotes.length > 0;
+          const isToday = key === todayKey;
+          const isSelected = key === selectedDay;
+          return (
+            <button key={i} onClick={() => onSelectDay(key)}
+              className={`aspect-square flex flex-col items-center justify-center gap-0.5 rounded-lg text-[12px] transition-all active:scale-90 ${
+                !cell.inMonth ? 'text-slate-300 dark:text-slate-700' : 'text-slate-600 dark:text-slate-300'
+              } ${isSelected ? 'bg-[#45C4B0] text-[#1a1206] font-semibold' : isToday ? 'bg-[#45C4B0]/10 font-semibold' : hasAny ? 'hover:bg-slate-100 dark:hover:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+              <span>{cell.date.getDate()}</span>
+              <span className="flex items-center gap-0.5 h-1.5">
+                {dayEntries.length > 0 && <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-[#1a1206]' : ''}`} style={!isSelected ? { background: '#45C4B0' } : undefined} />}
+                {dayNotes.length > 0 && <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-[#1a1206]/50' : 'bg-slate-400 dark:bg-slate-500'}`} />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// 날짜를 누르면 뜨는 바텀시트 — 그날의 일지 + 빠른 기록을 따로 보여줌 (읽기 위주, 일지는 눌러서 수정 가능)
+function DayDetailSheet({ open, dateKey, cfg, dayEntries, dayNotes, onClose, onEditEntry }) {
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape' && open) onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  const isEmpty = dayEntries.length === 0 && dayNotes.length === 0;
+
+  return (
+    <div className="fixed inset-0 z-[65] flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 wj-modal-pop" />
+      <div onClick={e => e.stopPropagation()}
+        className="wj-sheet-up relative w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl max-h-[80vh] overflow-y-auto rounded-t-2xl bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-2xl"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+        <div className="sticky top-0 bg-white dark:bg-slate-900 flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2 text-[14px] font-semibold text-slate-800 dark:text-slate-100">
+            <Calendar size={15} className="text-[#45C4B0]" /> {dateKey ? fmtDateShort(dateKey) : ''}
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all"><X size={16} /></button>
+        </div>
+
+        <div className="px-4 sm:px-6 py-4 space-y-4">
+          {isEmpty ? (
+            <div className="text-center py-10 text-slate-400 dark:text-slate-500 text-[13px]">이 날은 기록이 없어요.</div>
+          ) : (
+            <React.Fragment>
+              {dayEntries.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-2 flex items-center gap-1"><FolderKanban size={11} /> 업무일지 {dayEntries.length}건</div>
+                  <div className="space-y-2">
+                    {dayEntries.map(entry => {
+                      const meta = CATEGORY_MAP[entry.category] || CATEGORY_MAP['기타'];
+                      const imgCfg = repoCfgFor(cfg, entry._repo);
+                      return (
+                        <button key={entry.id} onClick={() => onEditEntry(entry)}
+                          className="w-full text-left rounded-lg border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 p-3 transition-colors">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <CategoryBadge category={entry.category} size="sm" />
+                            {entry._readonly && <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">보관 레포</span>}
+                          </div>
+                          <div className="text-[13px] font-medium text-slate-800 dark:text-slate-100">{entry.title || '(제목 없음)'}</div>
+                          {(entry.problem || entry.solution) && (
+                            <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">{entry.problem || entry.solution}</p>
+                          )}
+                          {entry.images && entry.images.length > 0 && (
+                            <div className="flex items-center gap-1.5 mt-2">
+                              {entry.images.slice(0, 4).map((ref, i) => {
+                                const { thumb, original } = imgPaths(ref);
+                                return <GhImage key={thumb + i} cfg={imgCfg} path={thumb} originalPath={original} className="w-10 h-10 rounded object-cover border border-slate-200 dark:border-slate-700" />;
+                              })}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {dayNotes.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-2 flex items-center gap-1"><Inbox size={11} /> 빠른 기록 {dayNotes.length}건</div>
+                  <div className="space-y-2">
+                    {dayNotes.map(note => {
+                      const imgCfg = repoCfgFor(cfg, note._repo);
+                      return (
+                        <div key={note.id} className="rounded-lg border border-slate-200 dark:border-slate-800 p-3">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-[10.5px] font-mono text-slate-400 dark:text-slate-500">{fmtTime(note.createdAt)}</span>
+                            {note.processed && <span className="text-[10px] text-emerald-500 flex items-center gap-0.5"><CircleCheckBig size={10} /> 정리됨</span>}
+                          </div>
+                          {note.text && <p className="text-[12.5px] text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words">{note.text}</p>}
+                          {note.imageRefs && note.imageRefs.length > 0 && (
+                            <div className="flex items-center gap-1.5 mt-2">
+                              {note.imageRefs.slice(0, 4).map((ref, i) => {
+                                const { thumb, original } = imgPaths(ref);
+                                return <GhImage key={thumb + i} cfg={imgCfg} path={thumb} originalPath={original} className="w-10 h-10 rounded object-cover border border-slate-200 dark:border-slate-700" />;
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EntriesTab({ cfg, entries, notes, onOpenNew, onEdit, onDelete, onToggleFavorite, hasArchives, archivesLoaded, archiveLoading, onLoadArchives }) {
   const [query, setQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [importanceFilter, setImportanceFilter] = useState('');
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [view, setView] = useState('list'); // 'list' | 'calendar'
+  const [calDate, setCalDate] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [selectedDay, setSelectedDay] = useState(null); // 'YYYY-MM-DD' | null — 바텀시트에 표시 중인 날짜
+
+  const entriesByDay = useMemo(() => {
+    const map = {};
+    entries.forEach(e => { if (e.date) (map[e.date] = map[e.date] || []).push(e); });
+    return map;
+  }, [entries]);
+  const notesByDay = useMemo(() => {
+    const map = {};
+    (notes || []).forEach(n => {
+      if (n.deleted || !n.createdAt) return;
+      const key = dateKeyFromDate(new Date(n.createdAt));
+      (map[key] = map[key] || []).push(n);
+    });
+    return map;
+  }, [notes]);
+
+  const goMonth = delta => setCalDate(({ y, m }) => {
+    const d = new Date(y, m + delta, 1);
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+  const handleEditFromSheet = entry => { setSelectedDay(null); onEdit(entry); };
 
   const projects = useMemo(() => [...new Set(entries.map(e => e.title).filter(Boolean))].sort(), [entries]);
 
@@ -1457,6 +2023,14 @@ function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete, onToggleFavorit
   return (
     <div className="flex flex-col gap-4">
       <StatsStrip entries={entries} />
+
+      {hasArchives && !archivesLoaded && (
+        <button onClick={onLoadArchives} disabled={archiveLoading}
+          className="flex items-center justify-center gap-1.5 text-[12px] font-medium px-3 py-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 disabled:opacity-50 transition-all">
+          {archiveLoading ? <LoaderCircle size={13} className="wj-spin" /> : <DatabaseIcon size={13} />}
+          {archiveLoading ? '보관된 레포 불러오는 중…' : '보관된 레포의 지난 기록도 함께 보기'}
+        </button>
+      )}
 
       <div>
         <button onClick={() => setShowSummary(v => !v)} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
@@ -1485,6 +2059,36 @@ function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete, onToggleFavorit
         </button>
       </div>
 
+      <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-1 w-fit">
+        <button onClick={() => setView('list')}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${view === 'list' ? 'bg-[#45C4B0]/15 text-[#0f7a6c] dark:text-[#45C4B0]' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+          <ListChecks size={13} /> 목록
+        </button>
+        <button onClick={() => setView('calendar')}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${view === 'calendar' ? 'bg-[#45C4B0]/15 text-[#0f7a6c] dark:text-[#45C4B0]' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+          <Calendar size={13} /> 달력
+        </button>
+      </div>
+
+      {view === 'calendar' ? (
+        <React.Fragment>
+          <div className="flex items-center justify-between px-0.5">
+            <button onClick={() => goMonth(-1)} className="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all"><ArrowLeft size={15} /></button>
+            <div className="flex items-center gap-2">
+              <span className="text-[13.5px] font-semibold text-slate-700 dark:text-slate-200">{calDate.y}년 {calDate.m + 1}월</span>
+              <button onClick={() => { const d = new Date(); setCalDate({ y: d.getFullYear(), m: d.getMonth() }); }}
+                className="text-[11px] font-medium px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">오늘</button>
+            </div>
+            <button onClick={() => goMonth(1)} className="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all"><ArrowRight size={15} /></button>
+          </div>
+          <MonthCalendar year={calDate.y} month={calDate.m} entriesByDay={entriesByDay} notesByDay={notesByDay} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+          <div className="flex items-center gap-3 px-0.5 text-[11px] text-slate-400 dark:text-slate-500">
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full" style={{ background: '#45C4B0' }} /> 업무일지</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" /> 빠른 기록</span>
+          </div>
+        </React.Fragment>
+      ) : (
+      <React.Fragment>
       {entries.length > 0 && (
         <div className="flex items-center justify-between px-0.5 -mt-1">
           <span className="text-[11.5px] text-slate-400 dark:text-slate-500 font-mono">{filtered.length}건 표시 중 {hasFilters && `(전체 ${entries.length}건)`}</span>
@@ -1509,6 +2113,18 @@ function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete, onToggleFavorit
           {filtered.map(entry => <EntryCard key={entry.id} cfg={cfg} entry={entry} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />)}
         </div>
       )}
+      </React.Fragment>
+      )}
+
+      <DayDetailSheet
+        open={!!selectedDay}
+        dateKey={selectedDay}
+        cfg={cfg}
+        dayEntries={selectedDay ? (entriesByDay[selectedDay] || []) : []}
+        dayNotes={selectedDay ? (notesByDay[selectedDay] || []) : []}
+        onClose={() => setSelectedDay(null)}
+        onEditEntry={handleEditFromSheet}
+      />
     </div>
   );
 }
@@ -1517,32 +2133,75 @@ function EntriesTab({ cfg, entries, onOpenNew, onEdit, onDelete, onToggleFavorit
    App 루트
 =========================================================== */
 function App() {
+  // App 컴포넌트 구조 안내 (수정할 때 참고용 목차)
+  //  1. 상태(state) 선언
+  //  2. 토스트 알림
+  //  3. 테마 적용
+  //  4. 데이터 로딩 — loadAll(활성 레포) / loadArchives(보관 레포, 지연 로딩)
+  //  5. 당겨서 새로고침(pull-to-refresh)
+  //  6. 전체 데이터 백업(JSON 내보내기)
+  //  7. 설정 저장 / 레포 전환(로테이션)
+  //  8. 쓰기 헬퍼 — writeActiveX(활성 레포 저장), mutateX/removeX(활성+보관 레포 공용 수정/삭제)
+  //  9. 빠른 기록(퀵노트) 핸들러
+  // 10. 문구 템플릿 핸들러
+  // 11. 일지(entry) 핸들러 — 즐겨찾기 / 작성·수정 / 삭제
+  // 12. 할 일(todo) 핸들러
+  // 13. 렌더링 (설정 안 된 경우 / 메인 화면)
+
+  /* ---------- 1. 상태 선언 ---------- */
   const [cfg, setCfg] = useState(() => {
     try { const raw = localStorage.getItem(CONFIG_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
   });
   const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'dark');
   const [tab, setTab] = useState('quick');
+
+  // 일지 / 빠른 기록 — 활성 레포분
   const [entries, setEntries] = useState([]);
   const [entriesSha, setEntriesSha] = useState(null);
   const [quickNotes, setQuickNotes] = useState([]);
   const [quickSha, setQuickSha] = useState(null);
+
+  // 일지 / 빠른 기록 — 보관(archive) 레포분. "지난 기록 보기"를 눌러야 채워짐 (지연 로딩)
+  const [archiveEntries, setArchiveEntries] = useState([]);
+  const [archiveNotes, setArchiveNotes] = useState([]);
+  const [archivesLoaded, setArchivesLoaded] = useState(false);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const archiveShaRef = useRef({}); // { "owner/repo": { entriesSha, notesSha } } — 보관 레포별 파일 sha 캐시
+
   const [todos, setTodos] = useState([]);
   const [todosSha, setTodosSha] = useState(null);
   const [phrases, setPhrases] = useState([]);
   const [phrasesSha, setPhrasesSha] = useState(null);
+
+  // 동기화 상태
   const [loading, setLoading] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [lastSynced, setLastSynced] = useState(null);
-  const [toast, setToast] = useState('');
+  const [offline, setOffline] = useState(false);       // 네트워크 실패 → 로컬 캐시로 대체 표시 중인지
+  const [offlineCachedAt, setOfflineCachedAt] = useState(null);
+
+  const [toast, setToast] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [savingNoteEdit, setSavingNoteEdit] = useState(false);
+
+  // 일지 작성/수정 모달
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
-  const [prefillNote, setPrefillNote] = useState(null);
+  const [prefillNote, setPrefillNote] = useState(null); // 빠른 기록에서 "일지로 정리하기"로 열었을 때만 값이 있음
+
   const notifiedRef = useRef(false);
+  const toastIdRef = useRef(0);
 
-  const showToast = useCallback(msg => { setToast(msg); setTimeout(() => setToast(''), 2400); }, []);
+  /* ---------- 2. 토스트 알림 ---------- */
+  // retry가 있으면 좀 더 오래 보여줌 (재시도 버튼을 누를 시간을 줌)
+  const showToast = useCallback((msg, retry) => {
+    const id = ++toastIdRef.current;
+    setToast({ id, msg, retry: retry || null });
+    setTimeout(() => { setToast(t => (t && t.id === id ? null : t)); }, retry ? 6000 : 2400);
+  }, []);
 
+  /* ---------- 3. 테마 적용 ---------- */
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.classList.toggle('light', theme !== 'dark');
@@ -1550,24 +2209,178 @@ function App() {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
+  /* ---------- 4. 데이터 로딩 ---------- */
   const loadAll = useCallback(async () => {
     if (!cfg) return;
     setLoading(true); setSyncError('');
+    const cacheKey = `workjournal.cache.v1.${cfg.owner}/${cfg.repo}`;
     try {
       const [e, q, t, p] = await Promise.all([ghGetJSON(cfg, PATH_ENTRIES), ghGetJSON(cfg, PATH_QUICK_NOTES), ghGetJSON(cfg, PATH_TODOS), ghGetJSON(cfg, PATH_PHRASES)]);
-      setEntries(e.data); setEntriesSha(e.sha);
-      setQuickNotes(q.data); setQuickSha(q.sha);
+      const activeTag = { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch || 'main' };
+      // 활성 레포만 불러옴 — 보관 레포는 사용자가 "지난 기록 보기"를 눌렀을 때만 따로 불러온다 (loadArchives)
+      setEntries(e.data.map(x => ({ ...x, _repo: activeTag, _readonly: false }))); setEntriesSha(e.sha);
+      setQuickNotes(q.data.map(x => ({ ...x, _repo: activeTag, _readonly: false }))); setQuickSha(q.sha);
       setTodos(t.data); setTodosSha(t.sha);
       setPhrases(p.data); setPhrasesSha(p.sha);
       setLastSynced(Date.now());
+      setOffline(false); setOfflineCachedAt(null);
+      // 다음에 오프라인일 때 보여줄 수 있게, 성공한 결과를 이 기기에 그대로 캐시해둠
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({ entries: e.data, quickNotes: q.data, todos: t.data, phrases: p.data, cachedAt: Date.now() }));
+      } catch (_) { /* 저장 공간 부족 등은 무시 — 캐시는 있으면 좋은 것일 뿐 */ }
     } catch (err) {
-      setSyncError(err.message || '동기화에 실패했습니다.');
+      // 네트워크 문제로 보이면, 이 기기에 마지막으로 저장해둔 내용이라도 보여줌 (읽기 전용은 아니지만 새로 쓰기는 어차피 네트워크가 있어야 됨)
+      let usedCache = false;
+      try {
+        const raw = localStorage.getItem(cacheKey);
+        if (raw) {
+          const cached = JSON.parse(raw);
+          const activeTag = { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch || 'main' };
+          setEntries((cached.entries || []).map(x => ({ ...x, _repo: activeTag, _readonly: false })));
+          setQuickNotes((cached.quickNotes || []).map(x => ({ ...x, _repo: activeTag, _readonly: false })));
+          setTodos(cached.todos || []);
+          setPhrases(cached.phrases || []);
+          setOffline(true);
+          setOfflineCachedAt(cached.cachedAt || null);
+          usedCache = true;
+        }
+      } catch (_) { /* 캐시 파싱 실패 시 그냥 원래 에러를 보여줌 */ }
+      setSyncError(usedCache ? '' : (err.message || '동기화에 실패했습니다.'));
+      if (!usedCache) setOffline(false);
     } finally {
       setLoading(false);
     }
   }, [cfg]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  /* ---------- 5. 당겨서 새로고침 ---------- */
+  // 당겨서 새로고침 — 스크롤 맨 위에서 아래로 당기면 loadAll() 실행
+  const [pullY, setPullY] = useState(0);
+  const pullStartRef = useRef(null);
+  const pullTriggeredRef = useRef(false);
+  const scrollRef = useRef(null);
+  const PULL_THRESHOLD = 64;
+
+  const onPullTouchStart = e => {
+    const el = scrollRef.current;
+    if (!el || el.scrollTop > 0) { pullStartRef.current = null; return; }
+    pullStartRef.current = e.touches[0].clientY;
+  };
+  const onPullTouchMove = e => {
+    if (pullStartRef.current == null) return;
+    const dy = e.touches[0].clientY - pullStartRef.current;
+    if (dy <= 0) { setPullY(0); return; }
+    setPullY(Math.min(dy * 0.5, 90));
+  };
+  const onPullTouchEnd = () => {
+    if (pullStartRef.current == null) return;
+    if (pullY >= PULL_THRESHOLD && !loading) {
+      pullTriggeredRef.current = true;
+      setPullY(48);
+      loadAll();
+    } else {
+      setPullY(0);
+    }
+    pullStartRef.current = null;
+  };
+  useEffect(() => {
+    if (!loading && pullTriggeredRef.current) {
+      pullTriggeredRef.current = false;
+      setPullY(0);
+    }
+  }, [loading]);
+
+  // 레포가 전환될 때마다 보관 데이터 로딩 상태 초기화 (새 cfg 기준으로 다시 눌러야 불러옴)
+  useEffect(() => {
+    setArchivesLoaded(false);
+    setArchiveEntries([]);
+    setArchiveNotes([]);
+    archiveShaRef.current = {};
+  }, [cfg]);
+
+  // "지난 기록 보기"를 눌렀을 때만 실행 — 보관 레포들의 entries/quick-notes를 읽기 전용으로 불러와 합침
+  const loadArchives = useCallback(async () => {
+    if (!cfg || archivesLoaded || archiveLoading) return;
+    const archives = cfg.archives || [];
+    if (!archives.length) { setArchivesLoaded(true); return; }
+    setArchiveLoading(true);
+    try {
+      const results = await Promise.all(archives.map(async a => {
+        const aCfg = repoCfgFor(cfg, a);
+        const tag = { owner: a.owner, repo: a.repo, branch: a.branch || 'main' };
+        const key = repoKeyOf(tag);
+        const [ae, aq] = await Promise.all([
+          ghGetJSON(aCfg, PATH_ENTRIES).catch(() => ({ data: [], sha: null })),
+          ghGetJSON(aCfg, PATH_QUICK_NOTES).catch(() => ({ data: [], sha: null })),
+        ]);
+        archiveShaRef.current[key] = { entriesSha: ae.sha, notesSha: aq.sha };
+        return {
+          entries: ae.data.map(x => ({ ...x, _repo: tag, _readonly: true, _repoLabel: a.label })),
+          notes: aq.data.map(x => ({ ...x, _repo: tag, _readonly: true, _repoLabel: a.label })),
+        };
+      }));
+      let ents = [], notes = [];
+      results.forEach(r => { ents = ents.concat(r.entries); notes = notes.concat(r.notes); });
+      setArchiveEntries(ents);
+      setArchiveNotes(notes);
+      setArchivesLoaded(true);
+    } catch (err) {
+      showToast('보관 레포를 불러오지 못했습니다: ' + err.message);
+    } finally {
+      setArchiveLoading(false);
+    }
+  }, [cfg, archivesLoaded, archiveLoading, showToast]);
+
+  // 화면에 실제로 뿌려줄 목록 — 보관 레포를 아직 안 불러왔으면 활성 레포 것만, 불러왔으면 합쳐서 보여줌
+  const displayEntries = useMemo(() => (archivesLoaded ? entries.concat(archiveEntries) : entries), [entries, archiveEntries, archivesLoaded]);
+  const displayNotes = useMemo(() => (archivesLoaded ? quickNotes.concat(archiveNotes) : quickNotes), [quickNotes, archiveNotes, archivesLoaded]);
+  const hasArchives = !!(cfg && cfg.archives && cfg.archives.length);
+
+  /* ---------- 6. 전체 데이터 백업 ---------- */
+  // 설정 화면의 "전체 데이터 백업" — 활성 레포 + 보관 레포까지 전부 새로 불러와서 JSON 파일로 내보냄.
+  // (화면에 이미 떠 있는 상태가 아니라 매번 최신으로 다시 받아와서, 보관 레포를 아직 안 열어봤어도 통째로 백업된다)
+  const handleExportData = async () => {
+    if (!cfg) return;
+    setExporting(true);
+    try {
+      const archives = cfg.archives || [];
+      const archiveResults = archives.length ? await Promise.all(archives.map(async a => {
+        const aCfg = repoCfgFor(cfg, a);
+        const [ae, aq] = await Promise.all([
+          ghGetJSON(aCfg, PATH_ENTRIES).catch(() => ({ data: [] })),
+          ghGetJSON(aCfg, PATH_QUICK_NOTES).catch(() => ({ data: [] })),
+        ]);
+        return { repo: { owner: a.owner, repo: a.repo, branch: a.branch || 'main', label: a.label }, entries: ae.data, quickNotes: aq.data };
+      })) : [];
+
+      const payload = {
+        app: '업무일지 (work-journal)',
+        exportedAt: new Date().toISOString(),
+        activeRepo: activeTag,
+        entries: entries.map(stripMeta),
+        quickNotes: quickNotes.map(stripMeta),
+        todos,
+        phrases,
+        archives: archiveResults,
+      };
+      const json = JSON.stringify(payload, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `worklog-backup-${todayStr()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      showToast('백업 파일을 내보냈습니다.');
+    } catch (err) {
+      showToast('내보내기 실패: ' + err.message, () => handleExportData());
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (notifiedRef.current || loading || !todos.length) return;
@@ -1578,9 +2391,14 @@ function App() {
     notifiedRef.current = true;
   }, [todos, loading]);
 
+  /* ---------- 7. 설정 저장 / 레포 전환(로테이션) ---------- */
   const handleSaveConfig = newCfg => {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(newCfg));
     setCfg(newCfg);
+  };
+  const handleRotateRepo = nextCfg => {
+    handleSaveConfig(nextCfg);
+    showToast('새 레포로 전환했어요. 이전 레포는 보관되어 계속 조회할 수 있어요.');
   };
   const handleDisconnect = () => {
     if (!window.confirm('이 기기에서 연결 설정을 삭제할까요? GitHub의 데이터는 그대로 남습니다.')) return;
@@ -1589,6 +2407,92 @@ function App() {
     setEntries([]); setQuickNotes([]); setTodos([]);
   };
 
+  /* ---------- 8. 쓰기 헬퍼 ----------
+     writeActiveNotes / writeActiveEntries : 활성 레포 파일에 그대로 저장
+     mutateNote / removeNote / mutateEntry / removeEntry :
+       항목이 활성 레포 것이면 활성 레포에, 보관 레포 것이면 "그 항목이 속한 보관 레포"에만 정확히 다시 씀
+       (다른 보관 레포는 절대 건드리지 않음 — repoKeyOf로 구분) */
+  const activeTag = useMemo(() => (cfg ? { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch || 'main' } : null), [cfg]);
+  // 현재(활성) 레포의 파일에만 실제로 저장
+  const writeActiveNotes = async (fullNotesArr, message) => {
+    const payload = fullNotesArr.map(stripMeta);
+    const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, payload, quickSha, message);
+    setQuickSha(newSha);
+    return newSha;
+  };
+  const writeActiveEntries = async (fullEntriesArr, message) => {
+    const payload = fullEntriesArr.map(stripMeta);
+    const newSha = await ghPutJSON(cfg, PATH_ENTRIES, payload, entriesSha, message);
+    setEntriesSha(newSha);
+    return newSha;
+  };
+
+  // 보관(archive) 레포 항목도 "예외적으로" 수정할 수 있도록 하는 범용 헬퍼들.
+  // 활성 레포와 달리, 그 항목이 속한 레포의 파일에만 정확히 다시 씀 (다른 보관 레포는 절대 건드리지 않음).
+  const mutateNote = async (note, mutateFn, message) => {
+    if (note._readonly) {
+      const key = repoKeyOf(note._repo);
+      const writeCfg = repoCfgFor(cfg, note._repo);
+      const sha = archiveShaRef.current[key] && archiveShaRef.current[key].notesSha;
+      const repoNotes = archiveNotes.filter(n => repoKeyOf(n._repo) === key);
+      const updated = repoNotes.map(n => (n.id === note.id ? mutateFn(n) : n));
+      const newSha = await ghPutJSON(writeCfg, PATH_QUICK_NOTES, updated.map(stripMeta), sha, message + ' (보관 레포)');
+      archiveShaRef.current[key] = { ...archiveShaRef.current[key], notesSha: newSha };
+      setArchiveNotes(prev => prev.map(n => (n.id === note.id ? mutateFn(n) : n)));
+    } else {
+      const updated = quickNotes.map(n => (n.id === note.id ? mutateFn(n) : n));
+      await writeActiveNotes(updated, message);
+      setQuickNotes(updated);
+    }
+  };
+  const removeNote = async (note, message) => {
+    if (note._readonly) {
+      const key = repoKeyOf(note._repo);
+      const writeCfg = repoCfgFor(cfg, note._repo);
+      const sha = archiveShaRef.current[key] && archiveShaRef.current[key].notesSha;
+      const repoNotes = archiveNotes.filter(n => repoKeyOf(n._repo) === key && n.id !== note.id);
+      const newSha = await ghPutJSON(writeCfg, PATH_QUICK_NOTES, repoNotes.map(stripMeta), sha, message + ' (보관 레포)');
+      archiveShaRef.current[key] = { ...archiveShaRef.current[key], notesSha: newSha };
+      setArchiveNotes(prev => prev.filter(n => n.id !== note.id));
+    } else {
+      const updated = quickNotes.filter(n => n.id !== note.id);
+      await writeActiveNotes(updated, message);
+      setQuickNotes(updated);
+    }
+  };
+  const mutateEntry = async (entry, mutateFn, message) => {
+    if (entry._readonly) {
+      const key = repoKeyOf(entry._repo);
+      const writeCfg = repoCfgFor(cfg, entry._repo);
+      const sha = archiveShaRef.current[key] && archiveShaRef.current[key].entriesSha;
+      const repoEntries = archiveEntries.filter(e => repoKeyOf(e._repo) === key);
+      const updated = repoEntries.map(e => (e.id === entry.id ? mutateFn(e) : e));
+      const newSha = await ghPutJSON(writeCfg, PATH_ENTRIES, updated.map(stripMeta), sha, message + ' (보관 레포)');
+      archiveShaRef.current[key] = { ...archiveShaRef.current[key], entriesSha: newSha };
+      setArchiveEntries(prev => prev.map(e => (e.id === entry.id ? mutateFn(e) : e)));
+    } else {
+      const updated = entries.map(e => (e.id === entry.id ? mutateFn(e) : e));
+      await writeActiveEntries(updated, message);
+      setEntries(updated);
+    }
+  };
+  const removeEntry = async (entry, message) => {
+    if (entry._readonly) {
+      const key = repoKeyOf(entry._repo);
+      const writeCfg = repoCfgFor(cfg, entry._repo);
+      const sha = archiveShaRef.current[key] && archiveShaRef.current[key].entriesSha;
+      const repoEntries = archiveEntries.filter(e => repoKeyOf(e._repo) === key && e.id !== entry.id);
+      const newSha = await ghPutJSON(writeCfg, PATH_ENTRIES, repoEntries.map(stripMeta), sha, message + ' (보관 레포)');
+      archiveShaRef.current[key] = { ...archiveShaRef.current[key], entriesSha: newSha };
+      setArchiveEntries(prev => prev.filter(e => e.id !== entry.id));
+    } else {
+      const updated = entries.filter(e => e.id !== entry.id);
+      await writeActiveEntries(updated, message);
+      setEntries(updated);
+    }
+  };
+
+  /* ---------- 9. 빠른 기록(퀵노트) 핸들러 ---------- */
   const handleAddNote = async (text, files) => {
     setUploading(true);
     try {
@@ -1603,76 +2507,74 @@ function App() {
         await ghPutImage(cfg, originalPath, origB64, '빠른 기록 사진 추가 (원본)');
         imageRefs.push({ thumb: thumbPath, original: originalPath });
       }
-      const newNote = { id: uid(), text, imageRefs, processed: false, linkedEntryId: null, createdAt: Date.now() };
+      const newNote = { id: uid(), text, imageRefs, processed: false, linkedEntryId: null, createdAt: Date.now(), _repo: activeTag, _readonly: false };
       const newNotes = [newNote, ...quickNotes];
-      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 추가');
-      setQuickNotes(newNotes); setQuickSha(newSha);
+      await writeActiveNotes(newNotes, '빠른 기록 추가');
+      setQuickNotes(newNotes);
       showToast('기록했습니다.');
     } catch (err) {
-      showToast('저장 실패: ' + err.message);
-    } finally {
-      setUploading(false);
+      showToast('저장 실패: ' + err.message, () => handleAddNote(text, files));
     }
   };
 
   const handleDeleteNote = async note => {
     try {
-      const newNotes = quickNotes.map(n => n.id === note.id ? { ...n, deleted: true, deletedAt: Date.now() } : n);
-      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 휴지통으로 이동');
-      setQuickNotes(newNotes); setQuickSha(newSha);
+      await mutateNote(note, n => ({ ...n, deleted: true, deletedAt: Date.now() }), '빠른 기록 휴지통으로 이동');
       showToast('휴지통으로 이동했습니다.');
     } catch (err) {
-      showToast('삭제 실패: ' + err.message);
+      showToast('삭제 실패: ' + err.message, () => handleDeleteNote(note));
     }
   };
 
   const handleRestoreNote = async note => {
     try {
-      const newNotes = quickNotes.map(n => n.id === note.id ? { ...n, deleted: false, deletedAt: null } : n);
-      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 복원');
-      setQuickNotes(newNotes); setQuickSha(newSha);
+      await mutateNote(note, n => ({ ...n, deleted: false, deletedAt: null }), '빠른 기록 복원');
       showToast('복원했습니다.');
     } catch (err) {
-      showToast('복원 실패: ' + err.message);
+      showToast('복원 실패: ' + err.message, () => handleRestoreNote(note));
     }
   };
 
   const handlePermanentDeleteNote = async note => {
-    if (!window.confirm('완전히 삭제할까요? 이 작업은 되돌릴 수 없습니다.')) return;
+    if (!window.confirm(note._readonly ? '완전히 삭제할까요? (보관 레포) 첨부된 사진도 함께 삭제되며, 이 작업은 되돌릴 수 없습니다.' : '완전히 삭제할까요? 첨부된 사진도 함께 삭제되며, 이 작업은 되돌릴 수 없습니다.')) return;
     try {
-      const newNotes = quickNotes.filter(n => n.id !== note.id);
-      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 영구 삭제');
-      setQuickNotes(newNotes); setQuickSha(newSha);
+      const writeCfg = repoCfgFor(cfg, note._repo);
+      const inUse = collectImagePaths(displayEntries, displayNotes, { excludeNoteId: note.id });
+      await deleteOrphanedImages(writeCfg, note.imageRefs, inUse, '빠른 기록 영구 삭제');
+      await removeNote(note, '빠른 기록 영구 삭제');
       showToast('영구 삭제했습니다.');
     } catch (err) {
-      showToast('삭제 실패: ' + err.message);
+      showToast('삭제 실패: ' + err.message, () => handlePermanentDeleteNote(note));
     }
   };
 
   const handleEditNoteSave = async (note, newText, keepImages, newFiles) => {
     setSavingNoteEdit(true);
     try {
+      const writeCfg = repoCfgFor(cfg, note._repo);
       const uploadedRefs = [];
       for (const file of newFiles) {
         const id = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
         const thumbB64 = await compressImage(file);
         const thumbPath = `images/thumb/${id}.jpg`;
-        await ghPutImage(cfg, thumbPath, thumbB64, '빠른 기록 사진 추가 (목록용)');
+        await ghPutImage(writeCfg, thumbPath, thumbB64, '빠른 기록 사진 추가 (목록용)');
         const origB64 = await fileToBase64(file);
         const originalPath = `images/original/${id}.${extFromFile(file)}`;
-        await ghPutImage(cfg, originalPath, origB64, '빠른 기록 사진 추가 (원본)');
+        await ghPutImage(writeCfg, originalPath, origB64, '빠른 기록 사진 추가 (원본)');
         uploadedRefs.push({ thumb: thumbPath, original: originalPath });
       }
-      const newNotes = quickNotes.map(n => n.id === note.id
-        ? { ...n, text: newText, imageRefs: [...keepImages, ...uploadedRefs], updatedAt: Date.now() }
-        : n);
-      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 수정');
-      setQuickNotes(newNotes); setQuickSha(newSha);
-      showToast('수정했습니다.');
+      // 편집 중 사용자가 빼버린 기존 사진은 다른 곳에서 안 쓰고 있으면 레포에서도 삭제
+      const removedRefs = (note.imageRefs || []).filter(
+        old => !keepImages.some(k => k.thumb === old.thumb && k.original === old.original)
+      );
+      if (removedRefs.length) {
+        const inUse = collectImagePaths(displayEntries, displayNotes, { excludeNoteId: note.id });
+        await deleteOrphanedImages(writeCfg, removedRefs, inUse, '빠른 기록 사진 제거');
+      }
+      await mutateNote(note, n => ({ ...n, text: newText, imageRefs: [...keepImages, ...uploadedRefs], updatedAt: Date.now() }), '빠른 기록 수정');
+      showToast(note._readonly ? '보관 레포에 저장했습니다.' : '수정했습니다.');
     } catch (err) {
-      showToast('수정 실패: ' + err.message);
-    } finally {
-      setSavingNoteEdit(false);
+      showToast('수정 실패: ' + err.message, () => handleEditNoteSave(note, newText, keepImages, newFiles));
     }
   };
 
@@ -1683,13 +2585,14 @@ function App() {
     setTab('entries');
   };
 
+  /* ---------- 10. 문구 템플릿 핸들러 ---------- */
   const handleAddPhrase = async text => {
     try {
       const newPhrases = [...phrases, { id: uid(), text }];
       const newSha = await ghPutJSON(cfg, PATH_PHRASES, newPhrases, phrasesSha, '문구 템플릿 추가');
       setPhrases(newPhrases); setPhrasesSha(newSha);
     } catch (err) {
-      showToast('저장 실패: ' + err.message);
+      showToast('저장 실패: ' + err.message, () => handleAddPhrase(text));
     }
   };
 
@@ -1699,27 +2602,27 @@ function App() {
       const newSha = await ghPutJSON(cfg, PATH_PHRASES, newPhrases, phrasesSha, '문구 템플릿 삭제');
       setPhrases(newPhrases); setPhrasesSha(newSha);
     } catch (err) {
-      showToast('삭제 실패: ' + err.message);
+      showToast('삭제 실패: ' + err.message, () => handleDeletePhrase(phrase));
     }
   };
 
+  /* ---------- 11. 일지 즐겨찾기 ---------- */
   const handleToggleFavorite = async entry => {
     try {
-      const newEntries = entries.map(e => e.id === entry.id ? { ...e, favorite: !e.favorite, updatedAt: Date.now() } : e);
-      const newSha = await ghPutJSON(cfg, PATH_ENTRIES, newEntries, entriesSha, entry.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가');
-      setEntries(newEntries); setEntriesSha(newSha);
+      await mutateEntry(entry, e => ({ ...e, favorite: !e.favorite, updatedAt: Date.now() }), entry.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가');
     } catch (err) {
-      showToast('저장 실패: ' + err.message);
+      showToast('저장 실패: ' + err.message, () => handleToggleFavorite(entry));
     }
   };
 
+  /* ---------- 12. 할 일(todo) 핸들러 ---------- */
   const handleAddTodo = async ({ text, due }) => {
     try {
       const newTodos = [{ id: uid(), text, due, done: false, createdAt: Date.now(), updatedAt: Date.now() }, ...todos];
       const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '할 일 추가');
       setTodos(newTodos); setTodosSha(newSha);
     } catch (err) {
-      showToast('저장 실패: ' + err.message);
+      showToast('저장 실패: ' + err.message, () => handleAddTodo({ text, due }));
     }
   };
   const handleToggleTodo = async todo => {
@@ -1728,7 +2631,7 @@ function App() {
       const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '할 일 상태 변경');
       setTodos(newTodos); setTodosSha(newSha);
     } catch (err) {
-      showToast('저장 실패: ' + err.message);
+      showToast('저장 실패: ' + err.message, () => handleToggleTodo(todo));
     }
   };
   const handleDeleteTodo = async todo => {
@@ -1737,48 +2640,67 @@ function App() {
       const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '할 일 삭제');
       setTodos(newTodos); setTodosSha(newSha);
     } catch (err) {
-      showToast('삭제 실패: ' + err.message);
+      showToast('삭제 실패: ' + err.message, () => handleDeleteTodo(todo));
     }
   };
 
+  /* ---------- 13. 일지 작성 / 수정 / 삭제 (+ 모달 열고 닫기) ---------- */
   const openNewEntry = () => { setEditingEntry(null); setPrefillNote(null); setModalOpen(true); };
-  const openEditEntry = entry => { setEditingEntry(entry); setPrefillNote(null); setModalOpen(true); };
+  const openEditEntry = entry => {
+    if (entry._readonly && !window.confirm('이 일지는 보관된 레포에 있어요. 수정하면 그 레포에 바로 저장돼요. 계속할까요?')) return;
+    setEditingEntry(entry); setPrefillNote(null); setModalOpen(true);
+  };
   const closeModal = () => { setModalOpen(false); setEditingEntry(null); setPrefillNote(null); };
 
   const handleSaveEntry = async data => {
     try {
-      let newEntries;
-      const extra = prefillNote ? { images: prefillNote.imageRefs || [], sourceNoteIds: [prefillNote.id] } : {};
       if (editingEntry) {
-        newEntries = entries.map(e => e.id === editingEntry.id ? { ...e, ...data, updatedAt: Date.now() } : e);
-      } else {
-        const now = Date.now();
-        newEntries = [{ id: uid(), ...data, ...extra, createdAt: now, updatedAt: now }, ...entries];
+        await mutateEntry(editingEntry, e => ({ ...e, ...data, updatedAt: Date.now() }), '일지 수정');
+        closeModal();
+        showToast(editingEntry._readonly ? '보관 레포에 저장했습니다.' : '저장했습니다.');
+        return;
       }
-      const newSha = await ghPutJSON(cfg, PATH_ENTRIES, newEntries, entriesSha, prefillNote ? '빠른 기록에서 일지 작성' : (editingEntry ? '일지 수정' : '새 일지 작성'));
-      setEntries(newEntries); setEntriesSha(newSha);
+      // 새 일지 작성 — 빠른 기록에서 정리하는 거라면 그 기록이 속한 레포에 그대로 작성 (사진이 그 레포에 있으므로), 아니면 활성 레포에 작성
+      const extra = prefillNote ? { images: prefillNote.imageRefs || [], sourceNoteIds: [prefillNote.id] } : {};
+      const now = Date.now();
+      const targetRepo = (prefillNote && prefillNote._readonly) ? prefillNote._repo : activeTag;
+      const newEntry = { id: uid(), ...data, ...extra, createdAt: now, updatedAt: now, _repo: targetRepo, _readonly: !!(prefillNote && prefillNote._readonly) };
+
+      if (newEntry._readonly) {
+        const key = repoKeyOf(targetRepo);
+        const writeCfg = repoCfgFor(cfg, targetRepo);
+        const sha = archiveShaRef.current[key] && archiveShaRef.current[key].entriesSha;
+        const repoEntries = archiveEntries.filter(e => repoKeyOf(e._repo) === key);
+        const updated = [newEntry, ...repoEntries];
+        const newSha = await ghPutJSON(writeCfg, PATH_ENTRIES, updated.map(stripMeta), sha, '빠른 기록에서 일지 작성 (보관 레포)');
+        archiveShaRef.current[key] = { ...archiveShaRef.current[key], entriesSha: newSha };
+        setArchiveEntries(prev => [newEntry, ...prev]);
+      } else {
+        const newEntries = [newEntry, ...entries];
+        await writeActiveEntries(newEntries, prefillNote ? '빠른 기록에서 일지 작성' : '새 일지 작성');
+        setEntries(newEntries);
+      }
 
       if (prefillNote) {
-        const newNotes = quickNotes.map(n => n.id === prefillNote.id ? { ...n, processed: true, linkedEntryId: newEntries[0].id } : n);
-        const newQSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, newNotes, quickSha, '빠른 기록 정리 완료 처리');
-        setQuickNotes(newNotes); setQuickSha(newQSha);
+        await mutateNote(prefillNote, n => ({ ...n, processed: true, linkedEntryId: newEntry.id }), '빠른 기록 정리 완료 처리');
       }
       closeModal();
       showToast('저장했습니다.');
     } catch (err) {
-      showToast('저장 실패: ' + err.message);
+      showToast('저장 실패: ' + err.message, () => handleSaveEntry(data));
     }
   };
 
   const handleDeleteEntry = async entry => {
-    if (!window.confirm(`"${entry.title}" 일지를 삭제할까요?`)) return;
+    if (!window.confirm(entry._readonly ? `"${entry.title}" (보관 레포) 일지를 삭제할까요? 첨부된 사진도 함께 삭제됩니다.` : `"${entry.title}" 일지를 삭제할까요? 첨부된 사진도 함께 삭제됩니다.`)) return;
     try {
-      const newEntries = entries.filter(e => e.id !== entry.id);
-      const newSha = await ghPutJSON(cfg, PATH_ENTRIES, newEntries, entriesSha, '일지 삭제');
-      setEntries(newEntries); setEntriesSha(newSha);
+      const writeCfg = repoCfgFor(cfg, entry._repo);
+      const inUse = collectImagePaths(displayEntries, displayNotes, { excludeEntryId: entry.id });
+      await deleteOrphanedImages(writeCfg, entry.images, inUse, '일지 삭제');
+      await removeEntry(entry, '일지 삭제');
       showToast('삭제했습니다.');
     } catch (err) {
-      showToast('삭제 실패: ' + err.message);
+      showToast('삭제 실패: ' + err.message, () => handleDeleteEntry(entry));
     }
   };
 
@@ -1786,6 +2708,8 @@ function App() {
     if ('Notification' in window) Notification.requestPermission();
   };
 
+  /* ---------- 13. 렌더링 ---------- */
+  // 아직 GitHub 연결(owner/repo/token) 설정이 안 됐으면 연결 화면만 보여줌
   if (!cfg) {
     return (
       <div className="dark">
@@ -1799,7 +2723,12 @@ function App() {
 
   return (
     <div className="h-[100dvh] flex flex-col bg-[#F7F7F9] dark:bg-[#0B0E13] transition-colors overflow-hidden">
-      <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+      <div ref={scrollRef} onTouchStart={onPullTouchStart} onTouchMove={onPullTouchMove} onTouchEnd={onPullTouchEnd}
+        className="flex-1 overflow-y-auto overflow-x-hidden" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div className="flex items-center justify-center overflow-hidden transition-[height] duration-200 ease-out" style={{ height: pullY }}>
+          <RefreshCw size={16} className={pullTriggeredRef.current || loading ? 'wj-spin text-[#45C4B0]' : 'text-slate-400 dark:text-slate-600'}
+            style={pullTriggeredRef.current || loading ? undefined : { transform: `rotate(${Math.min(pullY / PULL_THRESHOLD, 1) * 360}deg)` }} />
+        </div>
         <div className="max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
           <header className="flex items-center justify-between mb-4">
             <Logo />
@@ -1821,7 +2750,15 @@ function App() {
               <button onClick={loadAll} className="shrink-0 underline">재시도</button>
             </div>
           )}
-          {!syncError && lastSynced && (
+          {offline && (
+            <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-[12px] text-amber-500">
+              <span className="break-words">
+                오프라인이에요{offlineCachedAt ? ` · ${fmtDateShort(new Date(offlineCachedAt).toISOString().slice(0, 10))} ${fmtTime(offlineCachedAt)} 기준 저장된 내용을 보여주고 있어요` : ''}. 이 상태에서 한 변경사항은 저장되지 않을 수 있어요.
+              </span>
+              <button onClick={loadAll} className="shrink-0 underline whitespace-nowrap">다시 연결</button>
+            </div>
+          )}
+          {!syncError && !offline && lastSynced && (
             <div className="mb-4 text-[10.5px] text-slate-400 dark:text-slate-600 font-mono">
               마지막 동기화 {fmtTime(lastSynced)} · 이 기기에서 새로고침해야 최신 상태가 반영돼요
             </div>
@@ -1839,12 +2776,15 @@ function App() {
             </div>
           ) : (
           <React.Fragment>
-          {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={quickNotes} phrases={phrases} onAdd={handleAddNote} onDelete={handleDeleteNote} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDeleteNote} onEditSave={handleEditNoteSave} onPromote={handlePromote} uploading={uploading} savingEdit={savingNoteEdit} />}
+          {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={displayNotes} phrases={phrases} onAdd={handleAddNote} onDelete={handleDeleteNote} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDeleteNote} onEditSave={handleEditNoteSave} onPromote={handlePromote} uploading={uploading} savingEdit={savingNoteEdit} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
           {tab === 'todos' && <TodoTab todos={todos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} />}
-          {tab === 'entries' && <EntriesTab cfg={cfg} entries={entries} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} onToggleFavorite={handleToggleFavorite} />}
+          {tab === 'entries' && <EntriesTab cfg={cfg} entries={displayEntries} notes={displayNotes} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} onToggleFavorite={handleToggleFavorite} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
           {tab === 'settings' && (
             <div className="space-y-4">
               <SettingsPanel embedded initial={cfg} onSave={handleSaveConfig} onDisconnect={handleDisconnect} />
+              <DataExportPanel onExport={handleExportData} exporting={exporting} />
+              <RepoUsagePanel cfg={cfg} />
+              <RepoArchivePanel cfg={cfg} onRotate={handleRotateRepo} />
               <PhraseManager phrases={phrases} onAdd={handleAddPhrase} onDelete={handleDeletePhrase} />
               <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
                 <div className="flex items-center justify-between">
@@ -1872,7 +2812,7 @@ function App() {
       </div>
 
       <EntryFormModal open={modalOpen} initial={editingEntry} prefillNote={prefillNote} onClose={closeModal} onSave={handleSaveEntry} />
-      <Toast message={toast} />
+      <Toast toast={toast} onRetry={() => { if (toast && toast.retry) toast.retry(); }} />
       <GlobalLightbox />
     </div>
   );
