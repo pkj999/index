@@ -42,6 +42,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
 <style>
   html, body { background: #0B0E13; }
@@ -111,6 +112,8 @@ const ICON_PATHS = {
   'refresh-cw': '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   'circle-check-big': '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
   database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>',
+  'file-spreadsheet': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
   circle: '<circle cx="12" cy="12" r="10"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
@@ -182,13 +185,15 @@ const Undo2 = mkIcon('undo-2');
 const CalendarPlus = mkIcon('calendar-plus');
 const Quote = mkIcon('quote');
 const DatabaseIcon = mkIcon('database');
+const FileSpreadsheet = mkIcon('file-spreadsheet');
+const Upload = mkIcon('upload');
 
 /* ===========================================================
    상수
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'v12 · 2026-09-22';
+const APP_VERSION = 'v17 · 2026-09-22';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -216,6 +221,10 @@ const IMPORTANCE_LEVELS = [
 ];
 const IMPORTANCE_MAP = Object.fromEntries(IMPORTANCE_LEVELS.map(i => [i.id, i]));
 
+// 짧은 진동 피드백 — 지원 안 하는 기기(대부분의 PC 브라우저 등)에서는 조용히 무시됨
+function vibrate(pattern) {
+  try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (_) { /* 무시 */ }
+}
 function uid() {
   if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
   return 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2);
@@ -365,7 +374,9 @@ async function ghPutJSON(cfg, path, dataArr, sha, message) {
   const res = await ghFetch(cfg, path, { method: 'PUT', body });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `GitHub 저장 실패 (${res.status})`);
+    const e = new Error(err.message || `GitHub 저장 실패 (${res.status})`);
+    e.status = res.status; // 409(다른 곳에서 먼저 바뀜) 등을 호출부에서 구분할 수 있도록
+    throw e;
   }
   const json = await res.json();
   return json.content.sha;
@@ -534,38 +545,49 @@ function imgPaths(ref) {
 }
 
 /* ===========================================================
-   모바일 "뒤로가기" 버튼으로 모달만 닫히게 하는 훅
-   — PWA에서 히스토리 스택이 없으면 뒤로가기 버튼이 앱 자체를 종료시켜버림.
-     모달이 열릴 때 더미 히스토리 항목을 하나 쌓아두고, popstate(뒤로가기)가 오면
-     그걸 앱 종료가 아니라 "모달 닫기"로 해석하게 만든다.
-     버튼(취소/저장 등)으로 닫을 때는 반대로 쌓아둔 더미 항목을 알아서 정리한다.
+   모바일 "뒤로가기" 버튼으로 모달만 닫히게 하는 훅 (전역 오버레이 스택 방식)
+   — 예전 방식(모달마다 독립적으로 처리)은 두 가지 문제가 있었음:
+     1) 모달을 열고 뒤로가기를 연타하면, 첫 번째는 모달을 닫지만 그다음부턴 쌓인 히스토리가 없어서 앱이 꺼짐
+     2) 모달 안에서 사진 확대(라이트박스)처럼 겹쳐 열렸을 때, 뒤로가기 한 번에 위/아래 모달이 같이 닫힘
+   지금 방식은 열려있는 오버레이를 "스택"으로 관리해서, 열 때마다 히스토리를 하나씩 더 쌓고,
+   뒤로가기 한 번은 정확히 "가장 최근에 연 오버레이 하나만" 닫는다.
 =========================================================== */
+const wjOverlayStack = []; // [{ id, onClose }] — 가장 나중에 연 것이 배열 끝
+let wjSuppressNextPop = 0; // 버튼으로 닫으면서 우리가 직접 history.back()을 부를 때, 그로 인한 popstate는 한 번 무시
+let wjOverlayIdSeq = 0;
+
+window.addEventListener('popstate', () => {
+  if (wjSuppressNextPop > 0) { wjSuppressNextPop--; return; }
+  const top = wjOverlayStack.pop();
+  if (top) top.onClose();
+});
+
 function useBackButtonClose(open, onClose) {
+  const idRef = useRef(null);
+  if (idRef.current === null) idRef.current = ++wjOverlayIdSeq;
   const wasOpenRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
+    const id = idRef.current;
     if (open && !wasOpenRef.current) {
+      wjOverlayStack.push({ id, onClose: () => onCloseRef.current() });
       window.history.pushState({ wjModal: true }, '');
       wasOpenRef.current = true;
     } else if (!open && wasOpenRef.current) {
       wasOpenRef.current = false;
-      // 버튼으로 닫은 경우 — 아직 우리가 쌓아둔 더미 히스토리 위에 있다면 그걸 정리
-      if (window.history.state && window.history.state.wjModal) {
-        window.history.back();
+      const idx = wjOverlayStack.findIndex(o => o.id === id);
+      if (idx !== -1) {
+        wjOverlayStack.splice(idx, 1);
+        // 버튼으로 닫힌 것 — 아직 우리가 쌓아둔 더미 히스토리 위에 있다면 그걸 정리 (이때 발생하는 popstate는 무시해야 함)
+        if (window.history.state && window.history.state.wjModal) {
+          wjSuppressNextPop++;
+          window.history.back();
+        }
       }
     }
   }, [open]);
-
-  useEffect(() => {
-    const onPopState = () => {
-      if (wasOpenRef.current) {
-        wasOpenRef.current = false;
-        onClose();
-      }
-    };
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, [onClose]);
 }
 
 /* ===========================================================
@@ -705,14 +727,15 @@ function ImportanceMeter({ level, showLabel = true }) {
   );
 }
 
-function Toast({ toast, onRetry }) {
+function Toast({ toast, onAction }) {
   if (!toast || !toast.msg) return null;
+  const ActionIcon = toast.action && toast.action.icon;
   return (
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 px-4 py-2.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-slate-100 dark:text-slate-900 text-[13px] font-medium shadow-xl wj-modal-pop max-w-[90vw] text-center">
       <span>{toast.msg}</span>
-      {toast.retry && (
-        <button onClick={onRetry} className="shrink-0 inline-flex items-center gap-1 text-[12px] font-semibold underline underline-offset-2">
-          <RefreshCw size={11} /> 다시 시도
+      {toast.action && (
+        <button onClick={onAction} className="shrink-0 inline-flex items-center gap-1 text-[12px] font-semibold underline underline-offset-2 active:scale-90 transition-transform">
+          {ActionIcon && <ActionIcon size={11} />} {toast.action.label}
         </button>
       )}
     </div>
@@ -721,7 +744,7 @@ function Toast({ toast, onRetry }) {
 
 function TabButton({ active, onClick, icon: Ico, label, badge }) {
   return (
-    <button onClick={onClick} className="relative flex-1 flex flex-col items-center gap-0.5 py-1.5 group">
+    <button onClick={onClick} className="relative flex-1 flex flex-col items-center gap-0.5 py-1.5 group active:scale-95 transition-transform">
       <span className={`relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200 ${
         active ? 'bg-[#45C4B0]/15' : 'group-active:bg-slate-100 dark:group-active:bg-slate-800'
       }`}>
@@ -843,7 +866,7 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
           )}
 
           {onDisconnect && (
-            <button onClick={onDisconnect} className="w-full flex items-center justify-center gap-1.5 text-[12px] text-slate-500 hover:text-red-400 pt-1">
+            <button onClick={onDisconnect} className="w-full flex items-center justify-center gap-1.5 text-[12px] text-slate-500 hover:text-red-400 pt-1 active:scale-[0.98] transition-transform">
               <LogOut size={12} /> 연결 해제 (이 기기에서 설정 삭제)
             </button>
           )}
@@ -932,22 +955,41 @@ function RepoUsagePanel({ cfg }) {
   );
 }
 
-function DataExportPanel({ onExport, exporting }) {
+function DataExportPanel({ onExport, onExportExcel, onImportExcel, exporting, importing }) {
+  const fileInputRef = useRef(null);
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300">
-          <Download size={14} /> 전체 데이터 백업
-        </div>
-        <button onClick={onExport} disabled={exporting}
-          className="shrink-0 inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-[#45C4B0] text-[#1a1206] hover:brightness-105 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all">
+      <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300 mb-2.5">
+        <Download size={14} /> 데이터 내보내기 / 가져오기
+      </div>
+      <div className="flex items-center gap-2">
+        <button onClick={onExportExcel} disabled={exporting || importing}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md bg-[#45C4B0] text-[#1a1206] hover:brightness-105 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all">
+          {exporting ? <LoaderCircle size={12} className="wj-spin" /> : <FileSpreadsheet size={12} />}
+          엑셀(.xlsx)
+        </button>
+        <button onClick={onExport} disabled={exporting || importing}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-all">
           {exporting ? <LoaderCircle size={12} className="wj-spin" /> : <Download size={12} />}
-          {exporting ? '내보내는 중…' : 'JSON으로 내보내기'}
+          JSON 백업
         </button>
       </div>
       <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
-        일지·빠른 기록·할 일·문구를 보관된 레포까지 전부 포함해서 파일로 저장해요. 사진 원본은 포함되지 않아요(레포에 그대로 남아있어요) — GitHub 쪽에 문제가 생겼을 때를 대비한 비상용 백업이니 가끔 한 번씩 받아두시는 걸 추천해요.
+        <strong>엑셀</strong>은 일지·빠른 기록·할 일을 표로 정리해서 열어보고 필터·정렬하기 좋아요. <strong>JSON</strong>은 이 앱에 있는 데이터를 그대로 담은 비상용 백업이에요. 둘 다 사진 원본은 포함되지 않아요(레포에 그대로 남아있어요) — 보관된 레포까지 전부 포함해서 내보내요.
       </p>
+
+      <div className="border-t border-slate-100 dark:border-slate-800 mt-3 pt-3">
+        <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden"
+          onChange={e => { const f = e.target.files && e.target.files[0]; if (f) onImportExcel(f); e.target.value = ''; }} />
+        <button onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={exporting || importing}
+          className="w-full inline-flex items-center justify-center gap-1.5 text-[11.5px] font-medium px-2.5 py-1.5 rounded-md border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 disabled:opacity-50 transition-all">
+          {importing ? <LoaderCircle size={12} className="wj-spin" /> : <Upload size={12} />}
+          {importing ? '가져오는 중…' : '엑셀 파일에서 가져오기'}
+        </button>
+        <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
+          내보낸 형식 그대로만 인식해요. <strong>항상 새 행으로만 추가</strong>되고 기존 기록은 절대 안 바뀌어요 — 이미 있는 것과 완전히 같은 내용이거나, "레포" 칸에 값이 있는 행(보관 레포에서 나온 것)은 자동으로 건너뛰어요.
+        </p>
+      </div>
     </div>
   );
 }
@@ -989,7 +1031,7 @@ function RepoArchivePanel({ cfg, onRotate }) {
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
-      <button onClick={() => setExpanded(v => !v)} className="w-full flex items-center justify-between text-[13px] text-slate-600 dark:text-slate-300">
+      <button onClick={() => setExpanded(v => !v)} className="w-full flex items-center justify-between text-[13px] text-slate-600 dark:text-slate-300 active:scale-[0.98] transition-transform">
         <span className="flex items-center gap-2"><DatabaseIcon size={14} /> 데이터 레포 관리{archives.length > 0 ? ` (보관 ${archives.length}개)` : ''}</span>
         <ChevronDown size={14} className={expanded ? 'rotate-180 transition-transform' : 'transition-transform'} />
       </button>
@@ -1176,7 +1218,7 @@ function NoteEditModal({ open, note, cfg, onClose, onSave, saving }) {
       <form onSubmit={handleSubmit} className="wj-modal-pop relative w-full sm:max-w-md bg-white dark:bg-slate-900 sm:rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl my-0 sm:my-8 max-h-[100vh] sm:max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
           <h2 className="text-[15px] font-semibold text-slate-800 dark:text-slate-100">빠른 기록 수정</h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={16} /></button>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-transform"><X size={16} /></button>
         </div>
         <div className="px-5 py-4 space-y-3 overflow-y-auto">
           <textarea value={text} onChange={e => setText(e.target.value)} rows={4}
@@ -1209,7 +1251,7 @@ function NoteEditModal({ open, note, cfg, onClose, onSave, saving }) {
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 dark:border-slate-800 shrink-0">
-          <button type="button" onClick={onClose} className="px-3.5 py-2 rounded-lg text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">취소</button>
+          <button type="button" onClick={onClose} className="px-3.5 py-2 rounded-lg text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform">취소</button>
           <button type="submit" disabled={saving}
             className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-[#45C4B0] text-[#1a1206] hover:brightness-105 active:scale-[0.97] disabled:opacity-40 transition-all inline-flex items-center gap-1.5">
             {saving && <LoaderCircle size={13} className="wj-spin" />} 수정 저장
@@ -1226,6 +1268,7 @@ function SwipeToDelete({ onDelete, disabled, children }) {
   const [dragging, setDragging] = useState(false);
   const startRef = useRef(null);
   const axisRef = useRef(null);
+  const armedRef = useRef(false); // 임계값을 이미 넘어서 "놓으면 삭제됨" 상태인지 — 진동을 한 번만 울리기 위한 플래그
   const THRESHOLD = -84;
 
   const onTouchStart = e => {
@@ -1233,6 +1276,7 @@ function SwipeToDelete({ onDelete, disabled, children }) {
     const t = e.touches[0];
     startRef.current = { x: t.clientX, y: t.clientY };
     axisRef.current = null;
+    armedRef.current = false;
     setDragging(true);
   };
   const onTouchMove = e => {
@@ -1244,7 +1288,12 @@ function SwipeToDelete({ onDelete, disabled, children }) {
       if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
       axisRef.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
     }
-    if (axisRef.current === 'x') setDragX(Math.max(-110, Math.min(0, dx)));
+    if (axisRef.current === 'x') {
+      const next = Math.max(-110, Math.min(0, dx));
+      if (next <= THRESHOLD && !armedRef.current) { armedRef.current = true; vibrate(18); } // 삭제가 "발동"되는 순간 한 번 탁
+      else if (next > THRESHOLD && armedRef.current) { armedRef.current = false; }
+      setDragX(next);
+    }
   };
   const onTouchEnd = () => {
     if (disabled || !startRef.current) return;
@@ -1478,6 +1527,7 @@ function TodoTab({ todos, onAdd, onToggle, onDelete, onEdit, onClearDone }) {
 
   const handleToggleAnimated = t => {
     if (t.done) { onToggle(t); return; } // 완료 취소는 바로 처리
+    vibrate(15);
     setCompletingId(t.id);
     setTimeout(() => {
       onToggle(t);
@@ -1611,11 +1661,11 @@ function TodoTab({ todos, onAdd, onToggle, onDelete, onEdit, onClearDone }) {
       {done.length > 0 && (
         <div className="pt-1">
           <div className="flex items-center justify-between">
-            <button onClick={() => setShowDone(v => !v)} className="text-[11.5px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-1">
+            <button onClick={() => setShowDone(v => !v)} className="text-[11.5px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-1 active:scale-95 transition-transform">
               <ChevronDown size={12} className={showDone ? 'rotate-180 transition-transform' : 'transition-transform'} /> 완료 {done.length}건
             </button>
             {showDone && (
-              <button onClick={onClearDone} className="text-[11px] text-slate-400 dark:text-slate-500 hover:text-red-500 flex items-center gap-1">
+              <button onClick={onClearDone} className="text-[11px] text-slate-400 dark:text-slate-500 hover:text-red-500 flex items-center gap-1 active:scale-95 transition-transform">
                 <Trash2 size={11} /> 완료된 항목 전체 삭제
               </button>
             )}
@@ -1624,7 +1674,7 @@ function TodoTab({ todos, onAdd, onToggle, onDelete, onEdit, onClearDone }) {
             <div className="space-y-1.5 mt-2">
               {done.map(t => (
                 <div key={t.id} className="flex items-center gap-2.5 rounded-lg border border-slate-100 dark:border-slate-800/60 px-3 py-2 opacity-60">
-                  <button onClick={() => onToggle(t)} className="text-emerald-500 shrink-0"><CircleCheckBig size={16} /></button>
+                  <button onClick={() => onToggle(t)} className="text-emerald-500 shrink-0 active:scale-90 transition-transform"><CircleCheckBig size={16} /></button>
                   <span className="flex-1 min-w-0 text-[13px] text-slate-500 dark:text-slate-400 line-through break-words">{t.text}</span>
                   <button onClick={() => onDelete(t)} className="p-1 text-slate-300 dark:text-slate-600 hover:text-red-500 active:scale-90 transition-all shrink-0"><X size={13} /></button>
                 </div>
@@ -1698,6 +1748,56 @@ function ComboBoxInput({ value, onChange, suggestions, placeholder, autoFocus, i
   );
 }
 
+// 태그 입력 — 칩으로 보여주고, Enter/쉼표로 추가, 기존에 썼던 태그를 자동완성 후보로 보여줌 (오타로 태그 흩어지는 것 방지)
+function TagInput({ tags, onChange, suggestions, placeholder }) {
+  const [text, setText] = useState('');
+  const [focused, setFocused] = useState(false);
+  const filtered = useMemo(() => {
+    const q = text.trim().toLowerCase();
+    return (suggestions || [])
+      .filter(s => !tags.includes(s) && (!q || s.toLowerCase().includes(q)))
+      .slice(0, 6);
+  }, [suggestions, text, tags]);
+
+  const commit = raw => {
+    const v = raw.trim();
+    if (v && !tags.includes(v)) onChange([...tags, v]);
+    setText('');
+  };
+  const handleKeyDown = e => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit(text); }
+    else if (e.key === 'Backspace' && !text && tags.length > 0) onChange(tags.slice(0, -1));
+  };
+  const removeTag = t => onChange(tags.filter(x => x !== t));
+
+  return (
+    <div className="relative">
+      <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus-within:border-[#45C4B0]/60 transition-colors">
+        {tags.map(t => (
+          <span key={t} className="inline-flex items-center gap-1 text-[11.5px] px-2 py-0.5 rounded-full bg-slate-200/70 dark:bg-slate-700 text-slate-600 dark:text-slate-300 shrink-0">
+            {t}
+            <button type="button" onClick={() => removeTag(t)} className="hover:text-red-500 active:scale-90 transition-all"><X size={10} /></button>
+          </span>
+        ))}
+        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKeyDown}
+          onFocus={() => setFocused(true)} onBlur={() => { commit(text); setTimeout(() => setFocused(false), 120); }}
+          placeholder={tags.length ? '' : placeholder}
+          className="flex-1 min-w-[100px] py-0.5 bg-transparent text-[13px] text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none" />
+      </div>
+      {focused && filtered.length > 0 && (
+        <div className="absolute z-20 left-0 right-0 mt-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+          {filtered.map(s => (
+            <button key={s} type="button" onMouseDown={() => commit(s)}
+              className="w-full text-left px-3 py-2 text-[13px] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 truncate">
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SelectPill({ value, onChange, options, placeholder, icon: Ico }) {
   return (
     <div className="relative">
@@ -1721,6 +1821,7 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap
   const readonly = !!entry._readonly;
   const imgCfg = repoCfgFor(cfg, entry._repo);
   const handleFavClick = () => {
+    vibrate(12);
     setFavBounce(true);
     setTimeout(() => setFavBounce(false), 380);
     onToggleFavorite(entry);
@@ -1782,7 +1883,7 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap
                 </div>
               )}
             </div>
-            {hasMore && <button onClick={() => setExpanded(v => !v)} className="mt-2 text-[11px] font-medium text-[#45C4B0] hover:underline">{expanded ? '접기' : '더보기'}</button>}
+            {hasMore && <button onClick={() => setExpanded(v => !v)} className="mt-2 text-[11px] font-medium text-[#45C4B0] hover:underline active:scale-95 transition-transform">{expanded ? '접기' : '더보기'}</button>}
           </div>
         )}
 
@@ -1827,21 +1928,23 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap
   );
 }
 
-const EMPTY_FORM = { date: todayStr(), title: '', category: '개발', importance: '중', bullets: [''], problem: '', solution: '', lesson: '', tagsText: '', links: [] };
+const EMPTY_FORM = { date: todayStr(), title: '', category: '개발', importance: '중', bullets: [''], problem: '', solution: '', lesson: '', tags: [], links: [] };
 
-function EntryFormModal({ open, initial, prefillNote, existingProjects, categories, onClose, onSave }) {
+function EntryFormModal({ open, initial, prefillNote, existingProjects, existingTags, categories, onClose, onSave }) {
   const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
   const firstFieldRef = useRef(null);
   useBackButtonClose(open, onClose);
 
   useEffect(() => {
     if (!open) return;
+    setSaving(false); // 모달을 새로 열 때는 항상 저장 잠금을 풀어둠
     if (initial) {
       setForm({
         date: initial.date || todayStr(), title: initial.title || '', category: initial.category || '개발',
         importance: initial.importance || '중', bullets: initial.bullets && initial.bullets.length > 0 ? [...initial.bullets] : [''],
         problem: initial.problem || '', solution: initial.solution || '', lesson: initial.lesson || '',
-        tagsText: (initial.tags || []).join(', '),
+        tags: initial.tags || [],
         links: initial.links && initial.links.length > 0 ? initial.links.map(l => ({ ...l })) : [],
       });
     } else if (prefillNote) {
@@ -1868,16 +1971,21 @@ function EntryFormModal({ open, initial, prefillNote, existingProjects, categori
   const removeLink = idx => setForm(f => ({ ...f, links: f.links.filter((_, i) => i !== idx) }));
   const canSave = form.title.trim().length > 0 && form.date;
 
-  const handleSubmit = e => {
+  const handleSubmit = async e => {
     e.preventDefault();
-    if (!canSave) return;
-    onSave({
-      date: form.date, title: form.title.trim(), category: form.category, importance: form.importance,
-      bullets: form.bullets.map(b => b.trim()).filter(Boolean),
-      problem: form.problem.trim(), solution: form.solution.trim(), lesson: form.lesson.trim(),
-      tags: form.tagsText.split(',').map(t => t.trim()).filter(Boolean),
-      links: form.links.map(l => ({ label: (l.label || '').trim(), url: (l.url || '').trim() })).filter(l => l.url),
-    });
+    if (!canSave || saving) return; // 저장 중 연타 방지
+    setSaving(true);
+    try {
+      await onSave({
+        date: form.date, title: form.title.trim(), category: form.category, importance: form.importance,
+        bullets: form.bullets.map(b => b.trim()).filter(Boolean),
+        problem: form.problem.trim(), solution: form.solution.trim(), lesson: form.lesson.trim(),
+        tags: form.tags,
+        links: form.links.map(l => ({ label: (l.label || '').trim(), url: (l.url || '').trim() })).filter(l => l.url),
+      });
+    } finally {
+      setSaving(false); // onSave가 실패해도 다시 시도할 수 있게 풀어줌 (성공 시엔 모달이 닫히므로 어차피 무관)
+    }
   };
 
   return (
@@ -1888,7 +1996,7 @@ function EntryFormModal({ open, initial, prefillNote, existingProjects, categori
           <h2 className="text-[15px] font-semibold text-slate-800 dark:text-slate-100">
             {initial ? '일지 수정' : prefillNote ? '빠른 기록에서 일지 작성' : '새 일지 작성'}
           </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={16} /></button>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-transform"><X size={16} /></button>
         </div>
 
         <div className="px-5 sm:px-6 py-5 space-y-4 overflow-y-auto">
@@ -1937,11 +2045,11 @@ function EntryFormModal({ open, initial, prefillNote, existingProjects, categori
                   <span className="w-1 h-1 rounded-full bg-slate-400 shrink-0" />
                   <input type="text" value={b} onChange={e => updateBullet(idx, e.target.value)} placeholder="한 일을 입력하세요"
                     className="flex-1 px-2.5 py-1.5 rounded-md text-[13px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                  {form.bullets.length > 1 && <button type="button" onClick={() => removeBullet(idx)} className="p-1 text-slate-400 hover:text-red-500 shrink-0"><X size={13} /></button>}
+                  {form.bullets.length > 1 && <button type="button" onClick={() => removeBullet(idx)} className="p-1 text-slate-400 hover:text-red-500 shrink-0 active:scale-90 transition-transform"><X size={13} /></button>}
                 </div>
               ))}
             </div>
-            <button type="button" onClick={addBullet} className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-[#45C4B0] hover:underline"><Plus size={12} /> 항목 추가</button>
+            <button type="button" onClick={addBullet} className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-[#45C4B0] hover:underline active:scale-95 transition-transform"><Plus size={12} /> 항목 추가</button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1972,24 +2080,23 @@ function EntryFormModal({ open, initial, prefillNote, existingProjects, categori
                     className="w-24 shrink-0 px-2 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
                   <input type="url" value={l.url} onChange={e => updateLink(idx, 'url', e.target.value)} placeholder="https://…"
                     className="flex-1 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                  <button type="button" onClick={() => removeLink(idx)} className="p-1 text-slate-400 hover:text-red-500 shrink-0"><X size={13} /></button>
+                  <button type="button" onClick={() => removeLink(idx)} className="p-1 text-slate-400 hover:text-red-500 shrink-0 active:scale-90 transition-transform"><X size={13} /></button>
                 </div>
               ))}
             </div>
-            <button type="button" onClick={addLink} className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-[#45C4B0] hover:underline"><Plus size={12} /> 링크 추가</button>
+            <button type="button" onClick={addLink} className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-[#45C4B0] hover:underline active:scale-95 transition-transform"><Plus size={12} /> 링크 추가</button>
           </div>
 
           <div>
-            <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"><TagIcon size={12} /> 태그 <span className="text-slate-400 font-normal">(쉼표로 구분)</span></label>
-            <input type="text" value={form.tagsText} onChange={e => setForm(f => ({ ...f, tagsText: e.target.value }))} placeholder="예: React, 성능개선, 협업"
-              className="w-full px-3 py-2 rounded-lg text-[13px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+            <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"><TagIcon size={12} /> 태그 <span className="text-slate-400 font-normal">(Enter로 추가)</span></label>
+            <TagInput tags={form.tags} onChange={v => setForm(f => ({ ...f, tags: v }))} suggestions={existingTags || []} placeholder="예: React, 성능개선, 협업" />
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 sm:px-6 py-4 border-t border-slate-200 dark:border-slate-800 shrink-0">
-          <button type="button" onClick={onClose} className="px-3.5 py-2 rounded-lg text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">취소</button>
-          <button type="submit" disabled={!canSave} className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-[#45C4B0] text-[#1a1206] hover:brightness-105 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 transition-all">
-            {initial ? '수정 저장' : '저장'}
+          <button type="button" onClick={onClose} disabled={saving} className="px-3.5 py-2 rounded-lg text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 active:scale-95 transition-transform">취소</button>
+          <button type="submit" disabled={!canSave || saving} className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-[#45C4B0] text-[#1a1206] hover:brightness-105 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 transition-all inline-flex items-center gap-1.5">
+            {saving && <LoaderCircle size={13} className="wj-spin" />} {initial ? '수정 저장' : '저장'}
           </button>
         </div>
       </form>
@@ -2189,11 +2296,13 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
   const [projectFilter, setProjectFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [importanceFilter, setImportanceFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
-  const [view, setView] = useState('list'); // 'list' | 'calendar'
+  const [view, setView] = useState('list'); // 'list' | 'calendar' | 'project'
   const [calDate, setCalDate] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [selectedDay, setSelectedDay] = useState(null); // 'YYYY-MM-DD' | null — 바텀시트에 표시 중인 날짜
+  const [timelineProject, setTimelineProject] = useState(null);
 
   const entriesByDay = useMemo(() => {
     const map = {};
@@ -2217,6 +2326,26 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
   const handleEditFromSheet = entry => { setSelectedDay(null); onEdit(entry); };
 
   const projects = useMemo(() => [...new Set(entries.map(e => e.title).filter(Boolean))].sort(), [entries]);
+  const allTags = useMemo(() => [...new Set(entries.flatMap(e => e.tags || []))].sort(), [entries]);
+  // "프로젝트별" 보기용 — 최근에 손댄 프로젝트가 먼저 오도록
+  const projectsByRecency = useMemo(() => {
+    const map = new Map();
+    entries.forEach(e => {
+      if (!e.title) return;
+      if (!map.has(e.title) || (e.date || '') > map.get(e.title)) map.set(e.title, e.date || '');
+    });
+    return [...map.entries()].sort((a, b) => b[1].localeCompare(a[1])).map(([t]) => t);
+  }, [entries]);
+  useEffect(() => {
+    if (view === 'project' && (!timelineProject || !projectsByRecency.includes(timelineProject))) {
+      setTimelineProject(projectsByRecency[0] || null);
+    }
+  }, [view, projectsByRecency, timelineProject]);
+  const timelineEntries = useMemo(() => {
+    if (!timelineProject) return [];
+    return entries.filter(e => e.title === timelineProject)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || 0) - (b.createdAt || 0));
+  }, [entries, timelineProject]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -2224,6 +2353,7 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
       .filter(e => !projectFilter || e.title === projectFilter)
       .filter(e => !categoryFilter || e.category === categoryFilter)
       .filter(e => !importanceFilter || e.importance === importanceFilter)
+      .filter(e => !tagFilter || (e.tags || []).includes(tagFilter))
       .filter(e => !favoriteOnly || e.favorite)
       .filter(e => {
         if (!q) return true;
@@ -2231,9 +2361,9 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
         return hay.includes(q);
       })
       .sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
-  }, [entries, query, projectFilter, categoryFilter, importanceFilter, favoriteOnly]);
+  }, [entries, query, projectFilter, categoryFilter, importanceFilter, tagFilter, favoriteOnly]);
 
-  const hasFilters = !!(query || projectFilter || categoryFilter || importanceFilter || favoriteOnly);
+  const hasFilters = !!(query || projectFilter || categoryFilter || importanceFilter || tagFilter || favoriteOnly);
   const resetFilters = () => { setQuery(''); setProjectFilter(''); setCategoryFilter(''); setImportanceFilter(''); setFavoriteOnly(false); };
 
   return (
@@ -2249,7 +2379,7 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
       )}
 
       <div>
-        <button onClick={() => setShowSummary(v => !v)} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
+        <button onClick={() => setShowSummary(v => !v)} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 active:scale-95 transition-transform">
           <ChevronDown size={12} className={showSummary ? 'rotate-180 transition-transform' : 'transition-transform'} /> 주간·월간 요약
         </button>
         {showSummary && <div className="mt-2.5"><SummaryPanel entries={entries} categories={categories} /></div>}
@@ -2265,6 +2395,7 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
           <SelectPill value={projectFilter} onChange={setProjectFilter} options={projects} placeholder="전체 프로젝트" icon={FolderKanban} />
           <SelectPill value={categoryFilter} onChange={setCategoryFilter} options={categories.map(c => c.id)} placeholder="전체 카테고리" icon={Code2} />
           <SelectPill value={importanceFilter} onChange={setImportanceFilter} options={IMPORTANCE_LEVELS.map(i => i.id)} placeholder="전체 중요도" icon={AlertTriangle} />
+          <SelectPill value={tagFilter} onChange={setTagFilter} options={allTags} placeholder="전체 태그" icon={TagIcon} />
           <button onClick={() => setFavoriteOnly(v => !v)}
             className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-colors ${favoriteOnly ? 'border-[#E8A93B]/50 bg-[#E8A93B]/10 text-[#E8A93B]' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'}`}>
             <Star size={13} fill={favoriteOnly ? '#E8A93B' : 'none'} /> 즐겨찾기
@@ -2283,6 +2414,10 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
         <button onClick={() => setView('calendar')}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${view === 'calendar' ? 'bg-[#45C4B0]/15 text-[#0f7a6c] dark:text-[#45C4B0]' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
           <Calendar size={13} /> 달력
+        </button>
+        <button onClick={() => setView('project')}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${view === 'project' ? 'bg-[#45C4B0]/15 text-[#0f7a6c] dark:text-[#45C4B0]' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+          <FolderKanban size={13} /> 프로젝트별
         </button>
       </div>
 
@@ -2303,12 +2438,62 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
             <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" /> 빠른 기록</span>
           </div>
         </React.Fragment>
+      ) : view === 'project' ? (
+        <React.Fragment>
+          {projectsByRecency.length === 0 ? (
+            <div className="text-center py-14 text-slate-400 dark:text-slate-500 text-[13px]">아직 프로젝트가 없습니다.</div>
+          ) : (
+            <React.Fragment>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {projectsByRecency.map(p => (
+                  <button key={p} onClick={() => setTimelineProject(p)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors ${timelineProject === p ? 'bg-[#45C4B0] text-[#1a1206]' : 'bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'}`}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+
+              {timelineEntries.length > 0 && (
+                <div className="flex items-center gap-3 px-0.5 text-[11.5px] text-slate-400 dark:text-slate-500 font-mono">
+                  <span>{timelineEntries[0].date} → {timelineEntries[timelineEntries.length - 1].date}</span>
+                  <span>· {timelineEntries.length}건</span>
+                </div>
+              )}
+
+              <div className="flex flex-col">
+                {timelineEntries.map((entry, i) => {
+                  const meta = (categoryMap || CATEGORY_MAP)[entry.category] || (categoryMap || CATEGORY_MAP)['기타'] || CATEGORY_MAP['기타'];
+                  const isLast = i === timelineEntries.length - 1;
+                  return (
+                    <div key={entry.id} className="flex gap-3">
+                      <div className="flex flex-col items-center shrink-0 w-[68px]">
+                        <span className="text-[12.5px] font-mono font-bold text-slate-700 dark:text-slate-200 mt-1">{fmtDateShort(entry.date)}</span>
+                        <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0" style={{ background: meta.color }} />
+                        {!isLast && <div className="flex-1 w-px bg-slate-200 dark:bg-slate-700 mt-1.5 mb-1.5" style={{ minHeight: 24 }} />}
+                      </div>
+                      <button onClick={() => onEdit(entry)} className="flex-1 min-w-0 text-left rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700 p-3.5 mb-3 active:scale-[0.98] transition-all">
+                        <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                          <CategoryBadge category={entry.category} size="sm" categoryMap={categoryMap} />
+                          <ImportanceMeter level={entry.importance} showLabel={false} />
+                          {entry.favorite && <Star size={12} className="text-[#E8A93B]" fill="#E8A93B" />}
+                          {entry._readonly && <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">보관 레포</span>}
+                        </div>
+                        {entry.problem && <p className="text-[12.5px] text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2"><span className="text-slate-400 dark:text-slate-500">문제 ·</span> {entry.problem}</p>}
+                        {entry.solution && <p className="text-[12.5px] text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2 mt-0.5"><span className="text-slate-400 dark:text-slate-500">해결 ·</span> {entry.solution}</p>}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </React.Fragment>
+          )}
+        </React.Fragment>
       ) : (
       <React.Fragment>
       {entries.length > 0 && (
         <div className="flex items-center justify-between px-0.5 -mt-1">
           <span className="text-[11.5px] text-slate-400 dark:text-slate-500 font-mono">{filtered.length}건 표시 중 {hasFilters && `(전체 ${entries.length}건)`}</span>
-          {hasFilters && <button onClick={resetFilters} className="text-[11.5px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-1"><X size={11} /> 필터 초기화</button>}
+          {hasFilters && <button onClick={resetFilters} className="text-[11.5px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-1 active:scale-95 transition-transform"><X size={11} /> 필터 초기화</button>}
         </div>
       )}
 
@@ -2319,7 +2504,7 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
           </div>
           <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">{hasFilters ? '조건에 맞는 일지가 없습니다' : '아직 작성된 업무일지가 없습니다'}</p>
           {hasFilters ? (
-            <button onClick={resetFilters} className="mt-4 text-xs font-medium px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">필터 초기화</button>
+            <button onClick={resetFilters} className="mt-4 text-xs font-medium px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform">필터 초기화</button>
           ) : (
             <button onClick={onOpenNew} className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium px-3.5 py-1.5 rounded-md bg-[#45C4B0] text-[#1a1206] hover:brightness-105 active:scale-[0.97] whitespace-nowrap transition-all"><Plus size={14} strokeWidth={2.5} /> 첫 일지 작성하기</button>
           )}
@@ -2445,11 +2630,16 @@ function App() {
 
   const [toast, setToast] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [savingNoteEdit, setSavingNoteEdit] = useState(false);
 
   // 일지 작성/수정 모달
   const [modalOpen, setModalOpen] = useState(false);
+  // 삭제 "실행취소" — 삭제 누르면 화면에서 바로 감추고, 몇 초 안에 되돌리지 않으면 그때 실제로 지움
+  const [pendingDeleteEntryIds, setPendingDeleteEntryIds] = useState(() => new Set());
+  const [pendingDeleteTodoIds, setPendingDeleteTodoIds] = useState(() => new Set());
+  const pendingDeleteTimersRef = useRef({}); // id -> timeoutId
   const [editingEntry, setEditingEntry] = useState(null);
   const [prefillNote, setPrefillNote] = useState(null); // 빠른 기록에서 "일지로 정리하기"로 열었을 때만 값이 있음
 
@@ -2457,11 +2647,14 @@ function App() {
   const toastIdRef = useRef(0);
 
   /* ---------- 2. 토스트 알림 ---------- */
-  // retry가 있으면 좀 더 오래 보여줌 (재시도 버튼을 누를 시간을 줌)
-  const showToast = useCallback((msg, retry) => {
+  // action은 함수(기존처럼 "다시 시도"로 취급)이거나, { label, icon, onClick, duration } 객체(예: 실행취소)
+  const showToast = useCallback((msg, action) => {
     const id = ++toastIdRef.current;
-    setToast({ id, msg, retry: retry || null });
-    setTimeout(() => { setToast(t => (t && t.id === id ? null : t)); }, retry ? 6000 : 2400);
+    let actionObj = null;
+    if (typeof action === 'function') actionObj = { label: '다시 시도', icon: RefreshCw, onClick: action };
+    else if (action && typeof action === 'object') actionObj = action;
+    setToast({ id, msg, action: actionObj });
+    setTimeout(() => { setToast(t => (t && t.id === id ? null : t)); }, actionObj ? (actionObj.duration || 6000) : 2400);
   }, []);
 
   /* ---------- 3. 테마 적용 ---------- */
@@ -2601,8 +2794,13 @@ function App() {
   }, [cfg, archivesLoaded, archiveLoading, showToast]);
 
   // 화면에 실제로 뿌려줄 목록 — 보관 레포를 아직 안 불러왔으면 활성 레포 것만, 불러왔으면 합쳐서 보여줌
-  const displayEntries = useMemo(() => (archivesLoaded ? entries.concat(archiveEntries) : entries), [entries, archiveEntries, archivesLoaded]);
+  // + 방금 "삭제"를 눌러 실행취소 대기 중인 항목은 화면에서만 먼저 감춤
+  const displayEntries = useMemo(
+    () => (archivesLoaded ? entries.concat(archiveEntries) : entries).filter(e => !pendingDeleteEntryIds.has(e.id)),
+    [entries, archiveEntries, archivesLoaded, pendingDeleteEntryIds]
+  );
   const displayNotes = useMemo(() => (archivesLoaded ? quickNotes.concat(archiveNotes) : quickNotes), [quickNotes, archiveNotes, archivesLoaded]);
+  const visibleTodos = useMemo(() => todos.filter(t => !pendingDeleteTodoIds.has(t.id)), [todos, pendingDeleteTodoIds]);
   const hasArchives = !!(cfg && cfg.archives && cfg.archives.length);
   // 일지 작성 폼의 "프로젝트명 자동완성" 후보 — 지금까지 썼던 모든 프로젝트명(활성+보관), 최근 것이 먼저 오게
   const existingProjects = useMemo(() => {
@@ -2614,34 +2812,38 @@ function App() {
     });
     return [...seen.entries()].sort((a, b) => b[1] - a[1]).map(([title]) => title);
   }, [displayEntries]);
+  const existingTags = useMemo(() => [...new Set(displayEntries.flatMap(e => e.tags || []))].sort(), [displayEntries]);
 
   /* ---------- 6. 전체 데이터 백업 ---------- */
   // 설정 화면의 "전체 데이터 백업" — 활성 레포 + 보관 레포까지 전부 새로 불러와서 JSON 파일로 내보냄.
   // (화면에 이미 떠 있는 상태가 아니라 매번 최신으로 다시 받아와서, 보관 레포를 아직 안 열어봤어도 통째로 백업된다)
+  // JSON/엑셀 내보내기가 공통으로 쓰는 부분 — 활성 레포 + 보관 레포까지 전부 최신으로 새로 받아옴
+  const gatherFullExportData = async () => {
+    const archives = cfg.archives || [];
+    const archiveResults = archives.length ? await Promise.all(archives.map(async a => {
+      const aCfg = repoCfgFor(cfg, a);
+      const [ae, aq] = await Promise.all([
+        ghGetJSON(aCfg, PATH_ENTRIES).catch(() => ({ data: [] })),
+        ghGetJSON(aCfg, PATH_QUICK_NOTES).catch(() => ({ data: [] })),
+      ]);
+      return { repo: { owner: a.owner, repo: a.repo, branch: a.branch || 'main', label: a.label }, entries: ae.data, quickNotes: aq.data };
+    })) : [];
+    return {
+      activeRepo: activeTag,
+      entries: entries.map(stripMeta),
+      quickNotes: quickNotes.map(stripMeta),
+      todos,
+      phrases,
+      archives: archiveResults,
+    };
+  };
+
   const handleExportData = async () => {
     if (!cfg) return;
     setExporting(true);
     try {
-      const archives = cfg.archives || [];
-      const archiveResults = archives.length ? await Promise.all(archives.map(async a => {
-        const aCfg = repoCfgFor(cfg, a);
-        const [ae, aq] = await Promise.all([
-          ghGetJSON(aCfg, PATH_ENTRIES).catch(() => ({ data: [] })),
-          ghGetJSON(aCfg, PATH_QUICK_NOTES).catch(() => ({ data: [] })),
-        ]);
-        return { repo: { owner: a.owner, repo: a.repo, branch: a.branch || 'main', label: a.label }, entries: ae.data, quickNotes: aq.data };
-      })) : [];
-
-      const payload = {
-        app: '업무일지 (work-journal)',
-        exportedAt: new Date().toISOString(),
-        activeRepo: activeTag,
-        entries: entries.map(stripMeta),
-        quickNotes: quickNotes.map(stripMeta),
-        todos,
-        phrases,
-        archives: archiveResults,
-      };
+      const data = await gatherFullExportData();
+      const payload = { app: '업무일지 (work-journal)', exportedAt: new Date().toISOString(), ...data };
       const json = JSON.stringify(payload, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -2657,6 +2859,178 @@ function App() {
       showToast('내보내기 실패: ' + err.message, () => handleExportData());
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!cfg) return;
+    if (typeof XLSX === 'undefined') {
+      showToast('엑셀 기능을 불러오지 못했어요. 네트워크 확인 후 새로고침해주세요.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const data = await gatherFullExportData();
+      const repoLabelOf = repo => (repo && repo.label) ? repo.label : '';
+
+      // 일지 시트 — 사람이 보기 편하게 열 순서·한글 헤더로 정리
+      const entryRows = [];
+      const pushEntryRows = (arr, repoLabel) => {
+        arr.forEach(e => entryRows.push({
+          날짜: e.date || '', 프로젝트: e.title || '', 카테고리: e.category || '', 중요도: e.importance || '',
+          발생문제: e.problem || '', 해결과정: e.solution || '', 배운점: e.lesson || '',
+          주요성과: (e.bullets || []).filter(Boolean).join(' / '), 태그: (e.tags || []).join(', '),
+          즐겨찾기: e.favorite ? 'Y' : '', 레포: repoLabel,
+        }));
+      };
+      pushEntryRows(data.entries, '');
+      data.archives.forEach(a => pushEntryRows(a.entries, repoLabelOf(a.repo)));
+      entryRows.sort((a, b) => (b.날짜 || '').localeCompare(a.날짜 || ''));
+
+      // 빠른 기록 시트
+      const noteRows = [];
+      const pushNoteRows = (arr, repoLabel) => {
+        arr.forEach(n => {
+          const d = n.createdAt ? new Date(n.createdAt) : null;
+          noteRows.push({
+            날짜: d ? dateKeyFromDate(d) : '', 시간: d ? fmtTime(n.createdAt) : '',
+            내용: n.text || '', 정리됨: n.processed ? 'Y' : '', 휴지통: n.deleted ? 'Y' : '', 레포: repoLabel,
+          });
+        });
+      };
+      pushNoteRows(data.quickNotes, '');
+      data.archives.forEach(a => pushNoteRows(a.quickNotes, repoLabelOf(a.repo)));
+      noteRows.sort((a, b) => (b.날짜 || '').localeCompare(a.날짜 || '') || (b.시간 || '').localeCompare(a.시간 || ''));
+
+      // 할 일 시트
+      const todoRows = data.todos.map(t => ({
+        완료: t.done ? 'Y' : '', 할일: t.text || '', 기한: t.due || '',
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const addSheet = (rows, name, widths) => {
+        const ws = XLSX.utils.json_to_sheet(rows);
+        if (widths) ws['!cols'] = widths.map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, ws, name);
+      };
+      addSheet(entryRows, '업무일지', [11, 24, 10, 6, 30, 30, 24, 30, 16, 6, 14]);
+      addSheet(noteRows, '빠른기록', [11, 8, 40, 6, 6, 14]);
+      addSheet(todoRows, '할일', [6, 30, 11]);
+
+      XLSX.writeFile(wb, `worklog-${todayStr()}.xlsx`);
+      showToast('엑셀 파일을 내보냈습니다.');
+    } catch (err) {
+      showToast('내보내기 실패: ' + err.message, () => handleExportExcel());
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // 엑셀 다시 불러오기 — 항상 "새 행만 추가", 기존 기록은 절대 수정/삭제하지 않음.
+  // 1) 이미 앱에 있는 것과 내용이 완전히 같은 행은 자동으로 건너뜀(중복 방지)
+  // 2) "레포" 칸에 값이 있는 행(=보관 레포에서 나온 것)은 건너뜀 — 이미 그 레포에 안전하게 있으므로
+  const handleImportExcel = async file => {
+    if (!cfg || !file) return;
+    if (typeof XLSX === 'undefined') {
+      showToast('엑셀 기능을 불러오지 못했어요. 네트워크 확인 후 새로고침해주세요.');
+      return;
+    }
+    setImporting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const readSheet = name => {
+        const ws = wb.Sheets[name];
+        return ws ? XLSX.utils.sheet_to_json(ws, { defval: '' }) : [];
+      };
+      const S = v => String(v == null ? '' : v).trim();
+
+      // 일지
+      const existingEntryFp = new Set(entries.map(e => `${e.date}|${e.title}|${e.problem || ''}|${e.solution || ''}`));
+      const newEntries = [];
+      readSheet('업무일지').forEach(row => {
+        if (S(row['레포'])) return; // 보관 레포에서 나온 행은 건너뜀
+        const date = S(row['날짜']), title = S(row['프로젝트']);
+        if (!date || !title) return; // 필수값 없는 행은 건너뜀
+        const problem = S(row['발생문제']), solution = S(row['해결과정']);
+        const fp = `${date}|${title}|${problem}|${solution}`;
+        if (existingEntryFp.has(fp)) return; // 이미 있는 것과 완전히 같으면 건너뜀
+        existingEntryFp.add(fp);
+        const category = S(row['카테고리']);
+        const importance = S(row['중요도']);
+        const now = Date.now();
+        newEntries.push({
+          id: uid(), date, title,
+          category: allCategories.some(c => c.id === category) ? category : '기타',
+          importance: IMPORTANCE_LEVELS.some(l => l.id === importance) ? importance : '중',
+          problem, solution, lesson: S(row['배운점']),
+          bullets: S(row['주요성과']).split(' / ').map(s => s.trim()).filter(Boolean),
+          tags: S(row['태그']).split(',').map(s => s.trim()).filter(Boolean),
+          favorite: S(row['즐겨찾기']).toUpperCase() === 'Y',
+          images: [], sourceNoteIds: [],
+          createdAt: now, updatedAt: now, _repo: activeTag, _readonly: false,
+        });
+      });
+
+      // 빠른 기록
+      const existingNoteFp = new Set(quickNotes.map(n => `${dateKeyFromDate(new Date(n.createdAt || 0))}|${fmtTime(n.createdAt)}|${n.text || ''}`));
+      const newNotes = [];
+      readSheet('빠른기록').forEach(row => {
+        if (S(row['레포'])) return;
+        const text = S(row['내용']);
+        if (!text) return;
+        const fp = `${S(row['날짜'])}|${S(row['시간'])}|${text}`;
+        if (existingNoteFp.has(fp)) return;
+        existingNoteFp.add(fp);
+        const now = Date.now();
+        newNotes.push({
+          id: uid(), text, imageRefs: [],
+          processed: S(row['정리됨']).toUpperCase() === 'Y', linkedEntryId: null,
+          deleted: S(row['휴지통']).toUpperCase() === 'Y', deletedAt: null,
+          createdAt: now, _repo: activeTag, _readonly: false,
+        });
+      });
+
+      // 할 일
+      const existingTodoFp = new Set(todos.map(t => `${t.text || ''}|${t.due || ''}`));
+      const newTodos = [];
+      readSheet('할일').forEach(row => {
+        const text = S(row['할일']);
+        if (!text) return;
+        const due = S(row['기한']) || null;
+        const fp = `${text}|${due || ''}`;
+        if (existingTodoFp.has(fp)) return;
+        existingTodoFp.add(fp);
+        const now = Date.now();
+        newTodos.push({ id: uid(), text, due, done: S(row['완료']).toUpperCase() === 'Y', createdAt: now, updatedAt: now });
+      });
+
+      const total = newEntries.length + newNotes.length + newTodos.length;
+      if (total === 0) {
+        showToast('새로 추가할 항목이 없어요 (이미 있거나, 보관 레포 항목이거나, 형식이 안 맞아요).');
+        return;
+      }
+      if (!window.confirm(`업무일지 ${newEntries.length}건, 빠른 기록 ${newNotes.length}건, 할 일 ${newTodos.length}건을 새로 추가할까요?\n기존 기록은 전혀 바뀌지 않아요.`)) return;
+
+      if (newEntries.length) {
+        const merged = await writeActiveEntries(current => [...newEntries, ...current], '엑셀에서 일지 가져오기');
+        newEntries.forEach(e => markPending(cfg, 'entries', e));
+        setEntries(merged);
+      }
+      if (newNotes.length) {
+        const merged = await writeActiveNotes(current => [...newNotes, ...current], '엑셀에서 빠른 기록 가져오기');
+        newNotes.forEach(n => markPending(cfg, 'notes', n));
+        setQuickNotes(merged);
+      }
+      if (newTodos.length) {
+        const merged = await writeTodos(current => [...newTodos, ...current], '엑셀에서 할 일 가져오기');
+        setTodos(merged);
+      }
+      showToast(`가져왔습니다 (일지 ${newEntries.length}건 · 빠른 기록 ${newNotes.length}건 · 할 일 ${newTodos.length}건).`);
+    } catch (err) {
+      showToast('가져오기 실패: ' + err.message);
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -2686,23 +3060,52 @@ function App() {
   };
 
   /* ---------- 8. 쓰기 헬퍼 ----------
-     writeActiveNotes / writeActiveEntries : 활성 레포 파일에 그대로 저장
+     writeActiveNotes / writeActiveEntries : 활성 레포 파일에 저장. transform 함수를 받아서
+       "현재 상태"에 적용해 저장하고, 다른 기기/탭이 먼저 저장해서 충돌(409)이 나면
+       최신 데이터를 다시 받아와 같은 transform을 한 번 더 적용해 자동으로 재시도한다.
+       (내 변경사항은 유지하면서 상대방 변경사항도 같이 살아남음 — 임의로 덮어쓰지 않음)
+       반환값은 실제로 저장된 최종 배열(_repo 태그 포함) — 호출부는 이걸로 setEntries/setQuickNotes 하면 됨.
      mutateNote / removeNote / mutateEntry / removeEntry :
        항목이 활성 레포 것이면 활성 레포에, 보관 레포 것이면 "그 항목이 속한 보관 레포"에만 정확히 다시 씀
        (다른 보관 레포는 절대 건드리지 않음 — repoKeyOf로 구분) */
   const activeTag = useMemo(() => (cfg ? { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch || 'main' } : null), [cfg]);
-  // 현재(활성) 레포의 파일에만 실제로 저장
-  const writeActiveNotes = async (fullNotesArr, message) => {
-    const payload = fullNotesArr.map(stripMeta);
-    const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, payload, quickSha, message);
-    setQuickSha(newSha);
-    return newSha;
+  const writeActiveNotes = async (transformFn, message) => {
+    const attempt = async (base, sha) => {
+      const merged = transformFn(base);
+      const newSha = await ghPutJSON(cfg, PATH_QUICK_NOTES, merged.map(stripMeta), sha, message);
+      return { merged, newSha };
+    };
+    try {
+      const { merged, newSha } = await attempt(quickNotes, quickSha);
+      setQuickSha(newSha);
+      return merged;
+    } catch (err) {
+      if (err.status !== 409) throw err;
+      const fresh = await ghGetJSON(cfg, PATH_QUICK_NOTES);
+      const freshTagged = fresh.data.map(x => ({ ...x, _repo: activeTag, _readonly: false }));
+      const { merged, newSha } = await attempt(freshTagged, fresh.sha);
+      setQuickSha(newSha);
+      return merged;
+    }
   };
-  const writeActiveEntries = async (fullEntriesArr, message) => {
-    const payload = fullEntriesArr.map(stripMeta);
-    const newSha = await ghPutJSON(cfg, PATH_ENTRIES, payload, entriesSha, message);
-    setEntriesSha(newSha);
-    return newSha;
+  const writeActiveEntries = async (transformFn, message) => {
+    const attempt = async (base, sha) => {
+      const merged = transformFn(base);
+      const newSha = await ghPutJSON(cfg, PATH_ENTRIES, merged.map(stripMeta), sha, message);
+      return { merged, newSha };
+    };
+    try {
+      const { merged, newSha } = await attempt(entries, entriesSha);
+      setEntriesSha(newSha);
+      return merged;
+    } catch (err) {
+      if (err.status !== 409) throw err;
+      const fresh = await ghGetJSON(cfg, PATH_ENTRIES);
+      const freshTagged = fresh.data.map(x => ({ ...x, _repo: activeTag, _readonly: false }));
+      const { merged, newSha } = await attempt(freshTagged, fresh.sha);
+      setEntriesSha(newSha);
+      return merged;
+    }
   };
 
   // 보관(archive) 레포 항목도 "예외적으로" 수정할 수 있도록 하는 범용 헬퍼들.
@@ -2718,9 +3121,8 @@ function App() {
       archiveShaRef.current[key] = { ...archiveShaRef.current[key], notesSha: newSha };
       setArchiveNotes(prev => prev.map(n => (n.id === note.id ? mutateFn(n) : n)));
     } else {
-      const updated = quickNotes.map(n => (n.id === note.id ? mutateFn(n) : n));
-      await writeActiveNotes(updated, message);
-      setQuickNotes(updated);
+      const merged = await writeActiveNotes(current => current.map(n => (n.id === note.id ? mutateFn(n) : n)), message);
+      setQuickNotes(merged);
     }
   };
   const removeNote = async (note, message) => {
@@ -2733,9 +3135,8 @@ function App() {
       archiveShaRef.current[key] = { ...archiveShaRef.current[key], notesSha: newSha };
       setArchiveNotes(prev => prev.filter(n => n.id !== note.id));
     } else {
-      const updated = quickNotes.filter(n => n.id !== note.id);
-      await writeActiveNotes(updated, message);
-      setQuickNotes(updated);
+      const merged = await writeActiveNotes(current => current.filter(n => n.id !== note.id), message);
+      setQuickNotes(merged);
     }
   };
   const mutateEntry = async (entry, mutateFn, message) => {
@@ -2749,9 +3150,8 @@ function App() {
       archiveShaRef.current[key] = { ...archiveShaRef.current[key], entriesSha: newSha };
       setArchiveEntries(prev => prev.map(e => (e.id === entry.id ? mutateFn(e) : e)));
     } else {
-      const updated = entries.map(e => (e.id === entry.id ? mutateFn(e) : e));
-      await writeActiveEntries(updated, message);
-      setEntries(updated);
+      const merged = await writeActiveEntries(current => current.map(e => (e.id === entry.id ? mutateFn(e) : e)), message);
+      setEntries(merged);
     }
   };
   const removeEntry = async (entry, message) => {
@@ -2764,9 +3164,8 @@ function App() {
       archiveShaRef.current[key] = { ...archiveShaRef.current[key], entriesSha: newSha };
       setArchiveEntries(prev => prev.filter(e => e.id !== entry.id));
     } else {
-      const updated = entries.filter(e => e.id !== entry.id);
-      await writeActiveEntries(updated, message);
-      setEntries(updated);
+      const merged = await writeActiveEntries(current => current.filter(e => e.id !== entry.id), message);
+      setEntries(merged);
     }
   };
 
@@ -2786,10 +3185,10 @@ function App() {
         imageRefs.push({ thumb: thumbPath, original: originalPath });
       }
       const newNote = { id: uid(), text, imageRefs, processed: false, linkedEntryId: null, createdAt: Date.now(), _repo: activeTag, _readonly: false };
-      const newNotes = [newNote, ...quickNotes];
-      await writeActiveNotes(newNotes, '빠른 기록 추가');
+      const merged = await writeActiveNotes(current => [newNote, ...current], '빠른 기록 추가');
       markPending(cfg, 'notes', newNote); // GitHub 읽기 반영 지연 대비 — 새로고침해도 잠깐 안 사라지게
-      setQuickNotes(newNotes);
+      setQuickNotes(merged);
+      vibrate(20);
       showToast('기록했습니다.');
     } catch (err) {
       showToast('저장 실패: ' + err.message, () => handleAddNote(text, files));
@@ -2853,6 +3252,7 @@ function App() {
         await deleteOrphanedImages(writeCfg, removedRefs, inUse, '빠른 기록 사진 제거');
       }
       await mutateNote(note, n => ({ ...n, text: newText, imageRefs: [...keepImages, ...uploadedRefs], updatedAt: Date.now() }), '빠른 기록 수정');
+      vibrate(20);
       showToast(note._readonly ? '보관 레포에 저장했습니다.' : '수정했습니다.');
     } catch (err) {
       showToast('수정 실패: ' + err.message, () => handleEditNoteSave(note, newText, keepImages, newFiles));
@@ -2934,38 +3334,71 @@ function App() {
   };
 
   /* ---------- 12. 할 일(todo) 핸들러 ---------- */
+  // 할 일도 entries/notes와 같은 방식으로 — 충돌(409)이면 최신 데이터에 같은 변경을 다시 적용해 자동 재시도
+  const writeTodos = async (transformFn, message) => {
+    const attempt = async (base, sha) => {
+      const merged = transformFn(base);
+      const newSha = await ghPutJSON(cfg, PATH_TODOS, merged, sha, message);
+      return { merged, newSha };
+    };
+    try {
+      const { merged, newSha } = await attempt(todos, todosSha);
+      setTodosSha(newSha);
+      return merged;
+    } catch (err) {
+      if (err.status !== 409) throw err;
+      const fresh = await ghGetJSON(cfg, PATH_TODOS);
+      const { merged, newSha } = await attempt(fresh.data, fresh.sha);
+      setTodosSha(newSha);
+      return merged;
+    }
+  };
+
   const handleAddTodo = async ({ text, due }) => {
     try {
-      const newTodos = [{ id: uid(), text, due, done: false, createdAt: Date.now(), updatedAt: Date.now() }, ...todos];
-      const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '할 일 추가');
-      setTodos(newTodos); setTodosSha(newSha);
+      const newTodo = { id: uid(), text, due, done: false, createdAt: Date.now(), updatedAt: Date.now() };
+      const merged = await writeTodos(current => [newTodo, ...current], '할 일 추가');
+      setTodos(merged);
     } catch (err) {
       showToast('저장 실패: ' + err.message, () => handleAddTodo({ text, due }));
     }
   };
   const handleToggleTodo = async todo => {
     try {
-      const newTodos = todos.map(t => t.id === todo.id ? { ...t, done: !t.done, updatedAt: Date.now() } : t);
-      const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '할 일 상태 변경');
-      setTodos(newTodos); setTodosSha(newSha);
+      const merged = await writeTodos(current => current.map(t => t.id === todo.id ? { ...t, done: !t.done, updatedAt: Date.now() } : t), '할 일 상태 변경');
+      setTodos(merged);
     } catch (err) {
       showToast('저장 실패: ' + err.message, () => handleToggleTodo(todo));
     }
   };
-  const handleDeleteTodo = async todo => {
-    try {
-      const newTodos = todos.filter(t => t.id !== todo.id);
-      const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '할 일 삭제');
-      setTodos(newTodos); setTodosSha(newSha);
-    } catch (err) {
-      showToast('삭제 실패: ' + err.message, () => handleDeleteTodo(todo));
-    }
+  const handleDeleteTodo = todo => {
+    vibrate(20);
+    setPendingDeleteTodoIds(prev => new Set(prev).add(todo.id));
+    const commit = async () => {
+      delete pendingDeleteTimersRef.current[todo.id];
+      try {
+        const merged = await writeTodos(current => current.filter(t => t.id !== todo.id), '할 일 삭제');
+        setTodos(merged);
+      } catch (err) {
+        showToast('삭제 실패: ' + err.message, () => handleDeleteTodo(todo));
+      } finally {
+        setPendingDeleteTodoIds(prev => { const n = new Set(prev); n.delete(todo.id); return n; });
+      }
+    };
+    pendingDeleteTimersRef.current[todo.id] = setTimeout(commit, 4500);
+    showToast('할 일을 삭제했어요.', {
+      label: '실행취소', icon: Undo2, duration: 4500,
+      onClick: () => {
+        clearTimeout(pendingDeleteTimersRef.current[todo.id]);
+        delete pendingDeleteTimersRef.current[todo.id];
+        setPendingDeleteTodoIds(prev => { const n = new Set(prev); n.delete(todo.id); return n; });
+      },
+    });
   };
   const handleEditTodo = async (todo, changes) => {
     try {
-      const newTodos = todos.map(t => t.id === todo.id ? { ...t, ...changes, updatedAt: Date.now() } : t);
-      const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '할 일 수정');
-      setTodos(newTodos); setTodosSha(newSha);
+      const merged = await writeTodos(current => current.map(t => t.id === todo.id ? { ...t, ...changes, updatedAt: Date.now() } : t), '할 일 수정');
+      setTodos(merged);
     } catch (err) {
       showToast('저장 실패: ' + err.message, () => handleEditTodo(todo, changes));
     }
@@ -2975,9 +3408,8 @@ function App() {
     if (!doneCount) return;
     if (!window.confirm(`완료된 할 일 ${doneCount}건을 전부 삭제할까요? 되돌릴 수 없어요.`)) return;
     try {
-      const newTodos = todos.filter(t => !t.done);
-      const newSha = await ghPutJSON(cfg, PATH_TODOS, newTodos, todosSha, '완료된 할 일 일괄 삭제');
-      setTodos(newTodos); setTodosSha(newSha);
+      const merged = await writeTodos(current => current.filter(t => !t.done), '완료된 할 일 일괄 삭제');
+      setTodos(merged);
     } catch (err) {
       showToast('삭제 실패: ' + err.message, () => handleClearDoneTodos());
     }
@@ -3015,33 +3447,62 @@ function App() {
         archiveShaRef.current[key] = { ...archiveShaRef.current[key], entriesSha: newSha };
         setArchiveEntries(prev => [newEntry, ...prev]);
       } else {
-        const newEntries = [newEntry, ...entries];
-        await writeActiveEntries(newEntries, prefillNote ? '빠른 기록에서 일지 작성' : '새 일지 작성');
+        const merged = await writeActiveEntries(current => [newEntry, ...current], prefillNote ? '빠른 기록에서 일지 작성' : '새 일지 작성');
         markPending(cfg, 'entries', newEntry); // GitHub 읽기 반영 지연 대비
-        setEntries(newEntries);
+        setEntries(merged);
       }
 
       if (prefillNote) {
         await mutateNote(prefillNote, n => ({ ...n, processed: true, linkedEntryId: newEntry.id }), '빠른 기록 정리 완료 처리');
       }
       closeModal();
+      vibrate(20);
       showToast('저장했습니다.');
     } catch (err) {
       showToast('저장 실패: ' + err.message, () => handleSaveEntry(data));
     }
   };
 
-  const handleDeleteEntry = async entry => {
-    if (!window.confirm(entry._readonly ? `"${entry.title}" (보관 레포) 일지를 삭제할까요? 첨부된 사진도 함께 삭제됩니다.` : `"${entry.title}" 일지를 삭제할까요? 첨부된 사진도 함께 삭제됩니다.`)) return;
-    try {
-      const writeCfg = repoCfgFor(cfg, entry._repo);
-      const inUse = collectImagePaths(displayEntries, displayNotes, { excludeEntryId: entry.id });
-      await deleteOrphanedImages(writeCfg, entry.images, inUse, '일지 삭제');
-      await removeEntry(entry, '일지 삭제');
-      showToast('삭제했습니다.');
-    } catch (err) {
-      showToast('삭제 실패: ' + err.message, () => handleDeleteEntry(entry));
+  const handleDeleteEntry = entry => {
+    if (entry._readonly) {
+      // 보관 레포는 실행취소 없이, 확인창 + 즉시 삭제로 유지 (덜 흔한 예외 경로라 명확한 확인이 더 안전)
+      if (!window.confirm(`"${entry.title}" (보관 레포) 일지를 삭제할까요? 첨부된 사진도 함께 삭제됩니다.`)) return;
+      (async () => {
+        try {
+          const writeCfg = repoCfgFor(cfg, entry._repo);
+          const inUse = collectImagePaths(displayEntries, displayNotes, { excludeEntryId: entry.id });
+          await deleteOrphanedImages(writeCfg, entry.images, inUse, '일지 삭제');
+          await removeEntry(entry, '일지 삭제');
+          showToast('삭제했습니다.');
+        } catch (err) {
+          showToast('삭제 실패: ' + err.message, () => handleDeleteEntry(entry));
+        }
+      })();
+      return;
     }
+    vibrate(20);
+    setPendingDeleteEntryIds(prev => new Set(prev).add(entry.id));
+    const commit = async () => {
+      delete pendingDeleteTimersRef.current[entry.id];
+      try {
+        const inUse = collectImagePaths(displayEntries, displayNotes, { excludeEntryId: entry.id });
+        await deleteOrphanedImages(cfg, entry.images, inUse, '일지 삭제');
+        await removeEntry(entry, '일지 삭제');
+      } catch (err) {
+        showToast('삭제 실패: ' + err.message, () => handleDeleteEntry(entry));
+      } finally {
+        setPendingDeleteEntryIds(prev => { const n = new Set(prev); n.delete(entry.id); return n; });
+      }
+    };
+    pendingDeleteTimersRef.current[entry.id] = setTimeout(commit, 4500);
+    showToast(`"${entry.title}" 일지를 삭제했어요.`, {
+      label: '실행취소', icon: Undo2, duration: 4500,
+      onClick: () => {
+        clearTimeout(pendingDeleteTimersRef.current[entry.id]);
+        delete pendingDeleteTimersRef.current[entry.id];
+        setPendingDeleteEntryIds(prev => { const n = new Set(prev); n.delete(entry.id); return n; });
+      },
+    });
   };
 
   const requestNotifPermission = () => {
@@ -3087,7 +3548,7 @@ function App() {
           {syncError && (
             <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2.5 text-[12px] text-red-400">
               <span className="break-words">{syncError}</span>
-              <button onClick={loadAll} className="shrink-0 underline">재시도</button>
+              <button onClick={loadAll} className="shrink-0 underline active:scale-90 transition-transform">재시도</button>
             </div>
           )}
           {offline && (
@@ -3095,7 +3556,7 @@ function App() {
               <span className="break-words">
                 오프라인이에요{offlineCachedAt ? ` · ${fmtDateShort(new Date(offlineCachedAt).toISOString().slice(0, 10))} ${fmtTime(offlineCachedAt)} 기준 저장된 내용을 보여주고 있어요` : ''}. 이 상태에서 한 변경사항은 저장되지 않을 수 있어요.
               </span>
-              <button onClick={loadAll} className="shrink-0 underline whitespace-nowrap">다시 연결</button>
+              <button onClick={loadAll} className="shrink-0 underline whitespace-nowrap active:scale-90 transition-transform">다시 연결</button>
             </div>
           )}
           {!syncError && !offline && lastSynced && (
@@ -3117,12 +3578,12 @@ function App() {
           ) : (
           <React.Fragment>
           {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={displayNotes} phrases={phrases} onAdd={handleAddNote} onDelete={handleDeleteNote} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDeleteNote} onEditSave={handleEditNoteSave} onPromote={handlePromote} uploading={uploading} savingEdit={savingNoteEdit} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
-          {tab === 'todos' && <TodoTab todos={todos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} onEdit={handleEditTodo} onClearDone={handleClearDoneTodos} />}
+          {tab === 'todos' && <TodoTab todos={visibleTodos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} onEdit={handleEditTodo} onClearDone={handleClearDoneTodos} />}
           {tab === 'entries' && <EntriesTab cfg={cfg} entries={displayEntries} notes={displayNotes} categories={allCategories} categoryMap={allCategoryMap} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} onToggleFavorite={handleToggleFavorite} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
           {tab === 'settings' && (
             <div className="space-y-4">
               <SettingsPanel embedded initial={cfg} onSave={handleSaveConfig} onDisconnect={handleDisconnect} />
-              <DataExportPanel onExport={handleExportData} exporting={exporting} />
+              <DataExportPanel onExport={handleExportData} onExportExcel={handleExportExcel} onImportExcel={handleImportExcel} exporting={exporting} importing={importing} />
               <RepoUsagePanel cfg={cfg} />
               <RepoArchivePanel cfg={cfg} onRotate={handleRotateRepo} />
               <CategoryManager customCategories={customCategories} onAdd={handleAddCategory} onDelete={handleDeleteCategory} />
@@ -3130,7 +3591,7 @@ function App() {
               <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300"><BellIcon size={14} /> 할 일 알림</div>
-                  <button onClick={requestNotifPermission} className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">권한 요청</button>
+                  <button onClick={requestNotifPermission} className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform">권한 요청</button>
                 </div>
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
                   이 앱을 열어뒀을 때만 뜨는 알림이에요. 폰이 잠겨있거나 앱을 닫았을 때 울리는 진짜 알람은 아닙니다.
@@ -3153,8 +3614,8 @@ function App() {
         </div>
       </div>
 
-      <EntryFormModal open={modalOpen} initial={editingEntry} prefillNote={prefillNote} existingProjects={existingProjects} categories={allCategories} onClose={closeModal} onSave={handleSaveEntry} />
-      <Toast toast={toast} onRetry={() => { if (toast && toast.retry) toast.retry(); }} />
+      <EntryFormModal open={modalOpen} initial={editingEntry} prefillNote={prefillNote} existingProjects={existingProjects} existingTags={existingTags} categories={allCategories} onClose={closeModal} onSave={handleSaveEntry} />
+      <Toast toast={toast} onAction={() => { if (toast && toast.action) toast.action.onClick(); }} />
       <GlobalLightbox />
     </div>
   );
