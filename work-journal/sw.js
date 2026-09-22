@@ -1,7 +1,7 @@
 // 업무일지 — 간단한 앱 쉘 캐싱 서비스워커
 // 로컬 파일(index.html, manifest, 아이콘)만 캐시하고,
 // 외부 CDN(폰트/React/Tailwind 등)은 그대로 네트워크로 통과시킵니다.
-const CACHE_NAME = 'workjournal-shell-v3';
+const CACHE_NAME = 'workjournal-shell-v4';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {
@@ -9,6 +9,11 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).catch(() => {})
   );
   self.skipWaiting();
+});
+
+// 앱(index.html)이 "새 버전 설치 완료" 신호를 보내면 즉시 활성화 (이미 install에서 skipWaiting()을 부르긴 하지만, 나중에 그 부분을 바꾸더라도 안전하게 동작하도록)
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {

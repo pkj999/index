@@ -2825,7 +2825,29 @@ root.render(<App />);
 <script>
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      navigator.serviceWorker.register('sw.js').then(reg => {
+        // 앱을 열 때마다 새 sw.js가 있는지 한 번 더 적극적으로 확인 (브라우저 자체 체크는 느릴 수 있음)
+        reg.update().catch(() => {});
+        // 이미 새 버전이 설치돼서 대기 중이면 바로 활성화 요청
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        reg.addEventListener('updatefound', () => {
+          const installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              installing.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+      }).catch(() => {});
+
+      // 새 서비스워커가 실제로 이 페이지의 주인이 되는 순간(구버전 → 신버전 전환) 딱 한 번 자동 새로고침
+      let refreshed = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshed) return;
+        refreshed = true;
+        window.location.reload();
+      });
     });
   }
 </script>
