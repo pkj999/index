@@ -188,7 +188,7 @@ const DatabaseIcon = mkIcon('database');
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'v7 · 2026-09-22';
+const APP_VERSION = 'v9 · 2026-09-22';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -531,6 +531,41 @@ function imgPaths(ref) {
 }
 
 /* ===========================================================
+   모바일 "뒤로가기" 버튼으로 모달만 닫히게 하는 훅
+   — PWA에서 히스토리 스택이 없으면 뒤로가기 버튼이 앱 자체를 종료시켜버림.
+     모달이 열릴 때 더미 히스토리 항목을 하나 쌓아두고, popstate(뒤로가기)가 오면
+     그걸 앱 종료가 아니라 "모달 닫기"로 해석하게 만든다.
+     버튼(취소/저장 등)으로 닫을 때는 반대로 쌓아둔 더미 항목을 알아서 정리한다.
+=========================================================== */
+function useBackButtonClose(open, onClose) {
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      window.history.pushState({ wjModal: true }, '');
+      wasOpenRef.current = true;
+    } else if (!open && wasOpenRef.current) {
+      wasOpenRef.current = false;
+      // 버튼으로 닫은 경우 — 아직 우리가 쌓아둔 더미 히스토리 위에 있다면 그걸 정리
+      if (window.history.state && window.history.state.wjModal) {
+        window.history.back();
+      }
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (wasOpenRef.current) {
+        wasOpenRef.current = false;
+        onClose();
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [onClose]);
+}
+
+/* ===========================================================
    GitHub 이미지 캐시 훅
 =========================================================== */
 const imageUrlCache = new Map();
@@ -561,6 +596,8 @@ function GlobalLightbox() {
   const [url, setUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const closeLightbox = useCallback(() => setState(null), []);
+  useBackButtonClose(!!state, closeLightbox);
 
   useEffect(() => {
     const handler = e => { setState(e.detail); setUrl(null); setError(''); };
@@ -1051,6 +1088,7 @@ function NoteEditModal({ open, note, cfg, onClose, onSave, saving }) {
   const [keepImages, setKeepImages] = useState([]);
   const [newFiles, setNewFiles] = useState([]);
   const fileInputRef = useRef(null);
+  useBackButtonClose(open, onClose);
 
   useEffect(() => {
     if (open && note) {
@@ -1168,9 +1206,11 @@ function SwipeToDelete({ onDelete, disabled, children }) {
 
   return (
     <div className="relative">
-      <div className="absolute inset-0 rounded-xl flex items-center justify-end pr-5 bg-red-500 text-white">
-        <Trash2 size={17} />
-      </div>
+      {(dragging || dragX !== 0) && (
+        <div className="absolute inset-0 rounded-xl flex items-center justify-end pr-5 bg-red-500 text-white">
+          <Trash2 size={17} />
+        </div>
+      )}
       <div
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         style={{ transform: `translateX(${dragX}px)`, transition: dragging ? 'none' : 'transform 0.2s ease' }}>
@@ -1647,6 +1687,7 @@ const EMPTY_FORM = { date: todayStr(), title: '', category: '개발', importance
 function EntryFormModal({ open, initial, prefillNote, onClose, onSave }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const firstFieldRef = useRef(null);
+  useBackButtonClose(open, onClose);
 
   useEffect(() => {
     if (!open) return;
@@ -1899,6 +1940,7 @@ function MonthCalendar({ year, month, entriesByDay, notesByDay, selectedDay, onS
 
 // 날짜를 누르면 뜨는 바텀시트 — 그날의 일지 + 빠른 기록을 따로 보여줌 (읽기 위주, 일지는 눌러서 수정 가능)
 function DayDetailSheet({ open, dateKey, cfg, dayEntries, dayNotes, onClose, onEditEntry }) {
+  useBackButtonClose(open, onClose);
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape' && open) onClose(); }
     window.addEventListener('keydown', onKey);
