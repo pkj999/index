@@ -230,7 +230,7 @@ const Upload = mkIcon('upload');
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'ver.2 · 2026-09-23';
+const APP_VERSION = 'ver.3 · 2026-09-23';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -608,7 +608,16 @@ let wjOverlayIdSeq = 0;
    실제로 종료(또는 더 뒤로 이동)되게 둔다. */
 const WJ_EXIT_WINDOW_MS = 2000;
 let wjLastHomeBackAt = 0;
-window.history.pushState({ wjHomeGuard: true }, ''); // 앱 시작 시 가드를 한 번 쌓아둠
+
+// 오버레이가 없을 때 종료 방지용 가드를 다시 쌓는 함수 — 여러 시점에서 공통으로 호출함.
+// 이미 가드 위에 있으면(아직 안 소진됐으면) 중복으로 더 쌓지 않음 — 몇 초마다 도는 주기 점검 때문에
+// 히스토리가 끝없이 불어나는 걸 방지.
+function wjArmExitGuard() {
+  if (wjOverlayStack.length === 0 && !(window.history.state && window.history.state.wjHomeGuard)) {
+    window.history.pushState({ wjHomeGuard: true }, '');
+  }
+}
+wjArmExitGuard(); // 앱 시작 시 가드를 한 번 쌓아둠
 
 window.addEventListener('popstate', () => {
   if (wjSuppressNextPop > 0) { wjSuppressNextPop--; return; }
@@ -620,21 +629,20 @@ window.addEventListener('popstate', () => {
     return; // 최근에 한 번 눌렀음 — 가드를 다시 안 쌓아서 이번엔 그대로 진행(종료)되게 둠
   }
   wjLastHomeBackAt = now;
-  window.history.pushState({ wjHomeGuard: true }, ''); // 종료 취소 — 가드를 다시 쌓아 이번 뒤로가기를 흡수
+  wjArmExitGuard(); // 종료 취소 — 가드를 다시 쌓아 이번 뒤로가기를 흡수
   window.dispatchEvent(new CustomEvent('wj-exit-hint')); // App이 이 이벤트를 받아서 안내 토스트를 띄움
 });
 
 /* PWA를 "껐다 켰다" 하면(홈 버튼으로 나갔다가 다시 들어오는 등) 안드로이드가 페이지를 새로 불러오지 않고
    멈춰있던 화면을 그대로 다시 보여주는 경우가 많음 — 이땐 위 스크립트가 다시 실행되지 않아서 가드가
    재생성되지 않고, 지난 세션에서 가드가 이미 소진된 상태였다면 뒤로가기 한 번에 바로 꺼져버림.
-   그래서 앱이 다시 화면에 보일 때마다(오버레이가 없는 경우에 한해) 가드를 한 번 더 쌓아서,
-   항상 "한 번 더 누르면 종료" 안내부터 뜨도록 보강함. */
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && wjOverlayStack.length === 0) {
-    wjLastHomeBackAt = 0;
-    window.history.pushState({ wjHomeGuard: true }, '');
-  }
-});
+   그래서 앱이 다시 활성화될 때 잡을 수 있는 신호를 여러 개(화면 보임/포커스/페이지 재표시) 동시에 걸어두고,
+   혹시 그 신호들조차 못 잡는 기기가 있을 걸 대비해서 화면이 보이는 동안엔 몇 초마다 한 번씩
+   가드가 비어있지 않은지 스스로 다시 채워넣도록 이중 삼중으로 안전장치를 둠. */
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wjLastHomeBackAt = 0; wjArmExitGuard(); } });
+window.addEventListener('pageshow', () => { wjLastHomeBackAt = 0; wjArmExitGuard(); });
+window.addEventListener('focus', () => { wjLastHomeBackAt = 0; wjArmExitGuard(); });
+setInterval(() => { if (document.visibilityState === 'visible') wjArmExitGuard(); }, 3000);
 
 function useBackButtonClose(open, onClose) {
   const idRef = useRef(null);
