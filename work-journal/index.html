@@ -193,7 +193,7 @@ const Upload = mkIcon('upload');
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'v19 · 2026-09-23';
+const APP_VERSION = 'ver.1 · 2026-09-23';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -786,6 +786,15 @@ function TabButton({ active, onClick, icon: Ico, label, badge }) {
 /* ===========================================================
    설정 / 로그인 화면
 =========================================================== */
+// 설정 탭을 몇 개 구역으로 나눠 보여줄 때 쓰는 작은 섹션 제목
+function SettingsSectionHeader({ icon: Ico, label }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide px-0.5">
+      <Ico size={12} /> {label}
+    </div>
+  );
+}
+
 function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
   const [owner, setOwner] = useState(initial?.owner || '');
   const [repo, setRepo] = useState(initial?.repo || '');
@@ -794,6 +803,10 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState(null);
   const [verified, setVerified] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  // embedded(설정 탭)면 이미 연결돼 있는 상태이므로 기본은 요약 카드만 보여주고, "수정"을 눌러야 폼이 펼쳐짐.
+  // (첫 연결 화면인 !embedded일 땐 폼밖에 없으므로 항상 펼쳐진 상태)
+  const [editing, setEditing] = useState(!embedded);
 
   const canSubmit = owner.trim() && repo.trim() && token.trim();
 
@@ -803,12 +816,20 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
   const handleBranchChange = v => { setBranch(v); invalidate(); };
   const handleTokenChange = v => { setToken(v); invalidate(); };
 
+  const startEdit = () => {
+    // 그사이 다른 곳(저장소 전환 등)에서 연결 정보가 바뀌었을 수도 있으니, 펼칠 때 항상 최신 값으로 다시 채움
+    setOwner(initial?.owner || ''); setRepo(initial?.repo || ''); setBranch(initial?.branch || 'main'); setToken(initial?.token || '');
+    setVerified(true); setTestMsg(null); // 값을 안 바꾸고 그냥 보기만 하고 취소할 수도 있으니, 열자마자 저장 버튼을 막지는 않음
+    setEditing(true);
+  };
+  const cancelEdit = () => { setEditing(false); setTestMsg(null); };
+
   const handleTest = async () => {
     if (!canSubmit) return;
     setTesting(true); setTestMsg(null); setVerified(false);
     try {
       await ghTestConnection({ owner: owner.trim(), repo: repo.trim(), branch: branch.trim() || 'main', token: token.trim() });
-      setTestMsg({ ok: true, msg: '연결 성공! 이 레포에 정상적으로 접근할 수 있어요.' });
+      setTestMsg({ ok: true, msg: '연결 성공! 이 저장소에 정상적으로 접근할 수 있어요.' });
       setVerified(true);
     } catch (err) {
       setTestMsg({ ok: false, msg: err.message });
@@ -821,6 +842,7 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
   const handleSave = () => {
     if (!canSubmit || !verified) return;
     onSave({ owner: owner.trim(), repo: repo.trim(), branch: branch.trim() || 'main', token: token.trim() });
+    if (embedded) setEditing(false); // 저장 후엔 다시 요약 카드로 접어줌
   };
 
   return (
@@ -833,12 +855,26 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
             </div>
             <h1 className="text-lg font-semibold text-slate-100">업무일지에 연결하기</h1>
             <p className="text-[12.5px] text-slate-400 mt-1.5 leading-relaxed">
-              데이터를 저장할 <b className="text-slate-300">GitHub 비공개 레포지토리</b> 정보를 입력하세요.<br />
+              데이터를 저장할 <b className="text-slate-300">GitHub 비공개 저장소</b> 정보를 입력하세요.<br />
               입력한 정보는 이 기기의 브라우저에만 저장되고, 앱 코드에는 포함되지 않습니다.
             </p>
           </div>
         )}
 
+        {embedded && !editing ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
+            <div className="min-w-0 flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#45C4B0]/15 flex items-center justify-center shrink-0">
+                <Check size={15} strokeWidth={2.5} className="text-[#45C4B0]" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[13px] font-medium text-slate-700 dark:text-slate-200 truncate">{initial?.owner}/{initial?.repo}</div>
+                <div className="text-[11px] text-slate-400 dark:text-slate-500">연결됨{initial?.branch && initial.branch !== 'main' ? ` · ${initial.branch} 브랜치` : ''}</div>
+              </div>
+            </div>
+            <button onClick={startEdit} className="shrink-0 text-[11.5px] font-medium px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all">수정</button>
+          </div>
+        ) : (
         <div className={`space-y-3.5 ${embedded ? '' : 'rounded-2xl border border-slate-700/70 bg-slate-900/60 p-5'}`}>
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
@@ -847,19 +883,27 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
                 className="w-full min-w-0 px-3 py-2 rounded-lg text-[13px] bg-slate-800 border border-slate-700 text-slate-200 placeholder:text-slate-500" />
             </div>
             <div className="min-w-0">
-              <label className="block text-[11px] font-medium text-slate-400 mb-1.5">데이터 레포 이름</label>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1.5">데이터 저장소 이름</label>
               <input value={repo} onChange={e => handleRepoChange(e.target.value)} placeholder="예: my-notes-repo"
                 className="w-full min-w-0 px-3 py-2 rounded-lg text-[13px] bg-slate-800 border border-slate-700 text-slate-200 placeholder:text-slate-500" />
             </div>
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1.5">브랜치</label>
-            <input value={branch} onChange={e => handleBranchChange(e.target.value)} placeholder="main"
-              className="w-full min-w-0 px-3 py-2 rounded-lg text-[13px] bg-slate-800 border border-slate-700 text-slate-200 placeholder:text-slate-500" />
+            <button type="button" onClick={() => setShowAdvanced(v => !v)}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-slate-300 active:scale-95 transition-transform">
+              <ChevronDown size={12} className={showAdvanced ? 'rotate-180 transition-transform' : 'transition-transform'} /> 고급 설정{branch !== 'main' ? ` (브랜치: ${branch})` : ''}
+            </button>
+            {showAdvanced && (
+              <div className="mt-2">
+                <label className="block text-[11px] font-medium text-slate-400 mb-1.5">브랜치 <span className="text-slate-500 font-normal">— 보통 안 건드려도 돼요, 기본값은 main</span></label>
+                <input value={branch} onChange={e => handleBranchChange(e.target.value)} placeholder="main"
+                  className="w-full min-w-0 px-3 py-2 rounded-lg text-[13px] bg-slate-800 border border-slate-700 text-slate-200 placeholder:text-slate-500" />
+              </div>
+            )}
           </div>
           <div>
             <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 mb-1.5">
-              <Key size={11} /> Personal Access Token (fine-grained, 이 레포 Contents: Read and write)
+              <Key size={11} /> Personal Access Token
             </label>
             <input type="password" value={token} onChange={e => handleTokenChange(e.target.value)} placeholder="github_pat_..."
               className="w-full min-w-0 px-3 py-2 rounded-lg text-[13px] bg-slate-800 border border-slate-700 text-slate-200 placeholder:text-slate-500 font-mono" />
@@ -887,18 +931,23 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
             <p className="text-[11px] text-slate-500 text-center -mt-2">먼저 "연결 테스트"를 통과해야 저장할 수 있어요.</p>
           )}
 
+          {embedded && (
+            <button onClick={cancelEdit} className="w-full text-center text-[11.5px] text-slate-400 hover:text-slate-300 py-1 active:scale-95 transition-transform">취소</button>
+          )}
+
           {onDisconnect && (
             <button onClick={onDisconnect} className="w-full flex items-center justify-center gap-1.5 text-[12px] text-slate-500 hover:text-red-400 pt-1 active:scale-[0.98] transition-transform">
               <LogOut size={12} /> 연결 해제 (이 기기에서 설정 삭제)
             </button>
           )}
         </div>
+        )}
 
         {!embedded && (
           <p className="text-[11px] text-slate-500 text-center mt-4 leading-relaxed">
-            아직 비공개 레포나 토큰을 안 만드셨다면, 먼저 GitHub에서<br />
-            ① 새 비공개 레포 생성(README 포함) → ② Settings → Developer settings →<br />
-            Fine-grained tokens에서 그 레포만 골라 Contents 권한 Read/Write로 토큰 발급
+            아직 비공개 저장소나 토큰을 안 만드셨다면, 먼저 GitHub에서<br />
+            ① 새 비공개 저장소 생성(README 포함) → ② Settings → Developer settings →<br />
+            Fine-grained tokens에서 그 저장소만 골라 Contents 권한 Read/Write로 토큰 발급
           </p>
         )}
       </div>
@@ -909,7 +958,7 @@ function SettingsPanel({ initial, onSave, onDisconnect, embedded }) {
 const REPO_SIZE_MAX_MB = 1024;   // GitHub 권장 상한(약 1GB)
 const REPO_SIZE_WARN_MB = 800;   // 이 이상이면 경고 표시
 
-// 설정 탭 — 활성 레포의 GitHub 용량(size)을 보여주는 카드 (1GB 권장 상한 기준 경고 표시)
+// 설정 탭 — 활성 저장소의 GitHub 용량(size)을 보여주는 카드 (1GB 권장 상한 기준 경고 표시)
 function RepoUsagePanel({ cfg }) {
   const [sizeKB, setSizeKB] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -939,7 +988,7 @@ function RepoUsagePanel({ cfg }) {
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300">
-          <DatabaseIcon size={14} /> 데이터 레포 용량
+          <DatabaseIcon size={14} /> 데이터 저장소 용량
         </div>
         <button onClick={load} disabled={loading} title="새로고침"
           className="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all disabled:opacity-50">
@@ -965,7 +1014,7 @@ function RepoUsagePanel({ cfg }) {
           {isWarn && (
             <div className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-500">
               <AlertTriangle size={13} className="shrink-0 mt-[1px]" />
-              <span>용량이 {REPO_SIZE_WARN_MB}MB를 넘었어요. 새 데이터 레포로 옮길 준비를 해두는 게 좋아요.</span>
+              <span>용량이 {REPO_SIZE_WARN_MB}MB를 넘었어요. 새 데이터 저장소로 옮길 준비를 해두는 게 좋아요.</span>
             </div>
           )}
           <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
@@ -997,7 +1046,7 @@ function DataExportPanel({ onExport, onExportExcel, onImportExcel, exporting, im
         </button>
       </div>
       <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
-        <strong>엑셀</strong>은 일지·빠른 기록·할 일을 표로 정리해서 열어보고 필터·정렬하기 좋아요. <strong>JSON</strong>은 이 앱에 있는 데이터를 그대로 담은 비상용 백업이에요. 둘 다 사진 원본은 포함되지 않아요(레포에 그대로 남아있어요) — 보관된 레포까지 전부 포함해서 내보내요.
+        <strong>엑셀</strong>은 일지·빠른 기록·할 일을 표로 정리해서 열어보고 필터·정렬하기 좋아요. <strong>JSON</strong>은 이 앱에 있는 데이터를 그대로 담은 비상용 백업이에요. 둘 다 사진 원본은 포함되지 않아요(저장소에 그대로 남아있어요) — 보관된 저장소까지 전부 포함해서 내보내요.
       </p>
 
       <div className="border-t border-slate-100 dark:border-slate-800 mt-3 pt-3">
@@ -1009,14 +1058,14 @@ function DataExportPanel({ onExport, onExportExcel, onImportExcel, exporting, im
           {importing ? '가져오는 중…' : '엑셀 파일에서 가져오기'}
         </button>
         <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
-          내보낸 형식 그대로만 인식해요. <strong>항상 새 행으로만 추가</strong>되고 기존 기록은 절대 안 바뀌어요 — 이미 있는 것과 완전히 같은 내용이거나, "레포" 칸에 값이 있는 행(보관 레포에서 나온 것)은 자동으로 건너뛰어요.
+          내보낸 형식 그대로만 인식해요. <strong>항상 새 행으로만 추가</strong>되고 기존 기록은 절대 안 바뀌어요 — 이미 있는 것과 완전히 같은 내용이거나, "저장소" 칸에 값이 있는 행(보관 저장소에서 나온 것)은 자동으로 건너뛰어요. <strong>사진은 엑셀 파일 안에 들어있지 않아서, 가져와도 사진 없이 텍스트만 추가돼요.</strong>
         </p>
       </div>
     </div>
   );
 }
 
-// 설정 탭 — 보관된 레포 목록 표시 + 새 데이터 레포로 전환(로테이션)하는 폼
+// 설정 탭 — 보관된 저장소 목록 표시 + 새 데이터 저장소로 전환(로테이션)하는 폼
 function RepoArchivePanel({ cfg, onRotate }) {
   const [expanded, setExpanded] = useState(false);
   const [newRepo, setNewRepo] = useState('');
@@ -1034,7 +1083,7 @@ function RepoArchivePanel({ cfg, onRotate }) {
     setTesting(true); setTestMsg(null); setVerified(false);
     try {
       await ghTestConnection({ owner: cfg.owner, repo: newRepo.trim(), branch: newBranch.trim() || 'main', token: cfg.token });
-      setTestMsg({ ok: true, msg: '연결 성공! 이 레포로 전환할 수 있어요.' });
+      setTestMsg({ ok: true, msg: '연결 성공! 이 저장소로 전환할 수 있어요.' });
       setVerified(true);
     } catch (err) {
       setTestMsg({ ok: false, msg: err.message });
@@ -1045,7 +1094,7 @@ function RepoArchivePanel({ cfg, onRotate }) {
 
   const handleRotate = () => {
     if (!verified) return;
-    if (!window.confirm(`지금 레포를 "${newRepo.trim()}"(으)로 전환할까요?\n\n현재 레포(${cfg.repo})는 보관 처리되어 계속 읽을 수 있고, 앞으로 새로 쓰는 기록만 새 레포에 저장돼요.`)) return;
+    if (!window.confirm(`지금 저장소를 "${newRepo.trim()}"(으)로 전환할까요?\n\n현재 저장소(${cfg.repo})는 보관 처리되어 계속 읽을 수 있고, 앞으로 새로 쓰는 기록만 새 저장소에 저장돼요.`)) return;
     const archivedEntry = { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch || 'main', label: label.trim() || cfg.repo, archivedAt: Date.now() };
     onRotate({ ...cfg, repo: newRepo.trim(), branch: newBranch.trim() || 'main', archives: [archivedEntry, ...archives] });
     setNewRepo(''); setLabel(''); setVerified(false); setTestMsg(null); setExpanded(false);
@@ -1054,7 +1103,7 @@ function RepoArchivePanel({ cfg, onRotate }) {
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
       <button onClick={() => setExpanded(v => !v)} className="w-full flex items-center justify-between text-[13px] text-slate-600 dark:text-slate-300 active:scale-[0.98] transition-transform">
-        <span className="flex items-center gap-2"><DatabaseIcon size={14} /> 데이터 레포 관리{archives.length > 0 ? ` (보관 ${archives.length}개)` : ''}</span>
+        <span className="flex items-center gap-2"><DatabaseIcon size={14} /> 데이터 저장소 관리{archives.length > 0 ? ` (보관 ${archives.length}개)` : ''}</span>
         <ChevronDown size={14} className={expanded ? 'rotate-180 transition-transform' : 'transition-transform'} />
       </button>
 
@@ -1078,17 +1127,17 @@ function RepoArchivePanel({ cfg, onRotate }) {
           </div>
 
           <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
-            <p className="text-[11.5px] font-medium text-slate-600 dark:text-slate-300 mb-2">새 데이터 레포로 전환</p>
+            <p className="text-[11.5px] font-medium text-slate-600 dark:text-slate-300 mb-2">새 데이터 저장소로 전환</p>
             <p className="text-[10.5px] text-slate-400 dark:text-slate-500 leading-relaxed mb-2.5">
-              GitHub에서 새 비공개 레포를 먼저 만들고(README 포함), 지금 쓰는 토큰의 "레포 접근" 목록에 그 레포도 추가해주세요. 그다음 아래에 이름을 입력하고 연결 테스트 후 전환하면 돼요. 전환해도 지금 레포는 그대로 남고, 목록에서 계속 읽기 전용으로 보여요.
+              GitHub에서 새 비공개 저장소를 먼저 만들고(README 포함), 지금 쓰는 토큰의 "저장소 접근" 목록에 그 저장소도 추가해주세요. 그다음 아래에 이름을 입력하고 연결 테스트 후 전환하면 돼요. 전환해도 지금 저장소는 그대로 남고, 목록에서 계속 읽기 전용으로 보여요.
             </p>
             <div className="grid grid-cols-2 gap-2 mb-2">
-              <input value={newRepo} onChange={e => { setNewRepo(e.target.value); invalidate(); }} placeholder="새 레포 이름"
+              <input value={newRepo} onChange={e => { setNewRepo(e.target.value); invalidate(); }} placeholder="새 저장소 이름"
                 className="min-w-0 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
               <input value={newBranch} onChange={e => { setNewBranch(e.target.value); invalidate(); }} placeholder="main"
                 className="min-w-0 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
             </div>
-            <input value={label} onChange={e => setLabel(e.target.value)} placeholder="지금 레포에 붙일 라벨 (예: 2026-09, 비워두면 레포 이름 사용)"
+            <input value={label} onChange={e => setLabel(e.target.value)} placeholder="지금 저장소에 붙일 라벨 (예: 2026-09, 비워두면 저장소 이름 사용)"
               className="w-full min-w-0 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 mb-2" />
 
             {testMsg && (
@@ -1103,7 +1152,7 @@ function RepoArchivePanel({ cfg, onRotate }) {
               <button onClick={handleRotate} disabled={!verified}
                 title={!verified ? '먼저 연결 테스트를 통과해야 전환할 수 있어요' : ''}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-[#45C4B0] text-[#1a1206] hover:brightness-105 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 transition-all">
-                <ArrowRight size={12} /> 이 레포로 전환
+                <ArrowRight size={12} /> 이 저장소로 전환
               </button>
             </div>
           </div>
@@ -1343,7 +1392,7 @@ function SwipeToDelete({ onDelete, disabled, children }) {
 }
 
 // 빠른 기록 목록의 카드 한 개. 사진 "보기" 상태를 카드별로 독립적으로 가져야 해서(=클릭한 카드만 사진 로드) 별도 컴포넌트로 분리.
-function QuickNoteCard({ cfg, note, leaving, onEdit, onDelete, onPromote }) {
+function QuickNoteCard({ cfg, note, leaving, onEdit, onDelete, onPromote, onViewEntry }) {
   const readonly = !!note._readonly;
   const imgCfg = repoCfgFor(cfg, note._repo);
   return (
@@ -1375,9 +1424,15 @@ function QuickNoteCard({ cfg, note, leaving, onEdit, onDelete, onPromote }) {
         )}
         <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
           {note.processed ? (
-            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-500 font-medium">
-              <CircleCheckBig size={12} /> 일지로 정리됨
-            </span>
+            note.linkedEntryId ? (
+              <button onClick={onViewEntry} className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-500 hover:underline">
+                <CircleCheckBig size={12} /> 일지로 정리됨 · 보기 <ArrowRight size={11} />
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-500 font-medium">
+                <CircleCheckBig size={12} /> 일지로 정리됨
+              </span>
+            )
           ) : (
             <button onClick={onPromote}
               className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[#45C4B0] hover:underline">
@@ -1390,11 +1445,11 @@ function QuickNoteCard({ cfg, note, leaving, onEdit, onDelete, onPromote }) {
   );
 }
 
-function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPermanentDelete, onEditSave, onPromote, uploading, savingEdit, hasArchives, archivesLoaded, archiveLoading, onLoadArchives }) {
+function QuickCaptureTab({ cfg, notes, phrases, editingNote, onEditNote, onAdd, onDelete, onRestore, onPermanentDelete, onEditSave, onPromote, onViewEntry, uploading, savingEdit, hasArchives, archivesLoaded, archiveLoading, onLoadArchives }) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
   const [showTrash, setShowTrash] = useState(false);
-  const [editingNote, setEditingNote] = useState(null);
+  const [showProcessed, setShowProcessed] = useState(false);
   const [leavingNoteId, setLeavingNoteId] = useState(null);
 
   const handleDeleteAnimated = note => {
@@ -1423,10 +1478,12 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
 
   const active = useMemo(() => notes.filter(n => !n.deleted).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [notes]);
   const trashed = useMemo(() => notes.filter(n => n.deleted).sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0)), [notes]);
+  const unprocessed = useMemo(() => active.filter(n => !n.processed), [active]);
+  const processed = useMemo(() => active.filter(n => n.processed), [active]);
 
   const handleEditSave = (note, newText, keepImages, newFiles) => {
     onEditSave(note, newText, keepImages, newFiles);
-    setEditingNote(null);
+    onEditNote(null);
   };
 
   return (
@@ -1483,14 +1540,14 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
         </button>
       )}
 
-      {(active.length > 0 || trashed.length > 0) && (
+      {(active.length > 0 || trashed.length > 0 || showTrash) && (
         <div className="flex items-center justify-between px-0.5">
           <span className="text-[11.5px] text-slate-400 dark:text-slate-500 font-mono">
             {showTrash ? `휴지통 ${trashed.length}건` : `${active.length}건`}
           </span>
           <button onClick={() => setShowTrash(v => !v)}
             className="text-[11.5px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 inline-flex items-center gap-1">
-            <TrashIcon size={11} /> {showTrash ? '목록으로' : `휴지통${trashed.length > 0 ? ` (${trashed.length})` : ''}`}
+            {showTrash ? <ArrowLeft size={11} /> : <TrashIcon size={11} />} {showTrash ? '목록으로' : `휴지통${trashed.length > 0 ? ` (${trashed.length})` : ''}`}
           </button>
         </div>
       )}
@@ -1525,15 +1582,37 @@ function QuickCaptureTab({ cfg, notes, phrases, onAdd, onDelete, onRestore, onPe
           아직 빠른 기록이 없습니다. 위에서 바로 적어보세요.
         </div>
       ) : (
-        <div className="space-y-2.5">
-          {active.map(note => (
-            <QuickNoteCard key={note.id} cfg={cfg} note={note} leaving={leavingNoteId === note.id}
-              onEdit={() => setEditingNote(note)} onDelete={() => handleDeleteAnimated(note)} onPromote={() => onPromote(note)} />
-          ))}
-        </div>
+        <React.Fragment>
+          {unprocessed.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 dark:text-slate-500 text-[13px]">미처리 빠른 기록이 없습니다.</div>
+          ) : (
+            <div className="space-y-2.5">
+              {unprocessed.map(note => (
+                <QuickNoteCard key={note.id} cfg={cfg} note={note} leaving={leavingNoteId === note.id}
+                  onEdit={() => onEditNote(note)} onDelete={() => handleDeleteAnimated(note)} onPromote={() => onPromote(note)} onViewEntry={() => onViewEntry(note)} />
+              ))}
+            </div>
+          )}
+
+          {processed.length > 0 && (
+            <div className="pt-1">
+              <button onClick={() => setShowProcessed(v => !v)} className="text-[11.5px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-1 active:scale-95 transition-transform">
+                <ChevronDown size={12} className={showProcessed ? 'rotate-180 transition-transform' : 'transition-transform'} /> 정리됨 {processed.length}건
+              </button>
+              {showProcessed && (
+                <div className="space-y-2.5 mt-2">
+                  {processed.map(note => (
+                    <QuickNoteCard key={note.id} cfg={cfg} note={note} leaving={leavingNoteId === note.id}
+                      onEdit={() => onEditNote(note)} onDelete={() => handleDeleteAnimated(note)} onPromote={() => onPromote(note)} onViewEntry={() => onViewEntry(note)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </React.Fragment>
       )}
 
-      <NoteEditModal open={!!editingNote} note={editingNote} cfg={editingNote ? repoCfgFor(cfg, editingNote._repo) : cfg} onClose={() => setEditingNote(null)} onSave={handleEditSave} saving={savingEdit} />
+      <NoteEditModal open={!!editingNote} note={editingNote} cfg={editingNote ? repoCfgFor(cfg, editingNote._repo) : cfg} onClose={() => onEditNote(null)} onSave={handleEditSave} saving={savingEdit} />
     </div>
   );
 }
@@ -1837,7 +1916,26 @@ function SelectPill({ value, onChange, options, placeholder, icon: Ico }) {
   );
 }
 
-function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap }) {
+// 검색어와 겹치는 부분만 다른 색으로 표시해주는 컴포넌트 (대소문자 구분 없이, 텍스트 안에서 검색어가 나오는 곳마다 전부 표시)
+function HighlightText({ text, query }) {
+  const s = text == null ? '' : String(text);
+  const q = (query || '').trim();
+  if (!q) return s;
+  const lowerS = s.toLowerCase();
+  const lowerQ = q.toLowerCase();
+  const parts = [];
+  let i = 0;
+  while (i < s.length) {
+    const hit = lowerS.indexOf(lowerQ, i);
+    if (hit === -1) { parts.push(s.slice(i)); break; }
+    if (hit > i) parts.push(s.slice(i, hit));
+    parts.push(<mark key={hit} className="bg-[#E8A93B]/40 text-slate-900 dark:text-[#FDE9C4] rounded-[2px] px-0.5">{s.slice(hit, hit + q.length)}</mark>);
+    i = hit + q.length;
+  }
+  return parts;
+}
+
+function EntryCard({ cfg, entry, query, onEdit, onDelete, onToggleFavorite, onViewSource, categoryMap }) {
   const [expanded, setExpanded] = useState(false);
   const [favBounce, setFavBounce] = useState(false);
   const catMap = categoryMap || CATEGORY_MAP;
@@ -1869,7 +1967,7 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap
                 </span>
               )}
             </div>
-            <h3 className="text-[15px] font-semibold text-slate-800 dark:text-slate-100 leading-snug break-words">{entry.title || '(제목 없음)'}</h3>
+            <h3 className="text-[15px] font-semibold text-slate-800 dark:text-slate-100 leading-snug break-words"><HighlightText text={entry.title || '(제목 없음)'} query={query} /></h3>
           </div>
           <div className="flex items-center gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
             <button onClick={handleFavClick} title={entry.favorite ? '즐겨찾기 해제' : '즐겨찾기'}
@@ -1886,7 +1984,7 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap
             {entry.bullets.map((b, i) => (
               <li key={i} className="flex items-start gap-2 text-[13px] text-slate-600 dark:text-slate-300 leading-relaxed">
                 <span className="mt-[7px] w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500 shrink-0" />
-                <span className="break-words">{b}</span>
+                <span className="break-words"><HighlightText text={b} query={query} /></span>
               </li>
             ))}
           </ul>
@@ -1898,13 +1996,13 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap
               {entry.problem && (
                 <div>
                   <div className="text-[10.5px] font-semibold text-slate-400 dark:text-slate-500 mb-1">문제 상황</div>
-                  <p className={`text-[12.5px] text-slate-600 dark:text-slate-300 leading-relaxed ${!expanded ? 'line-clamp-2' : ''}`}>{entry.problem}</p>
+                  <p className={`text-[12.5px] text-slate-600 dark:text-slate-300 leading-relaxed ${!expanded ? 'line-clamp-2' : ''}`}><HighlightText text={entry.problem} query={query} /></p>
                 </div>
               )}
               {entry.solution && (
                 <div>
                   <div className="text-[10.5px] font-semibold text-slate-400 dark:text-slate-500 mb-1">해결 과정</div>
-                  <p className={`text-[12.5px] text-slate-600 dark:text-slate-300 leading-relaxed ${!expanded ? 'line-clamp-2' : ''}`}>{entry.solution}</p>
+                  <p className={`text-[12.5px] text-slate-600 dark:text-slate-300 leading-relaxed ${!expanded ? 'line-clamp-2' : ''}`}><HighlightText text={entry.solution} query={query} /></p>
                 </div>
               )}
             </div>
@@ -1915,7 +2013,7 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap
         {entry.lesson && (
           <div className="mt-3 flex gap-2 rounded-lg border-l-2 border-[#45C4B0] bg-[#45C4B00D] px-3 py-2.5">
             <Lightbulb size={14} className="text-[#45C4B0] mt-0.5 shrink-0" />
-            <p className="text-[12.5px] text-slate-600 dark:text-slate-300 leading-relaxed break-words">{entry.lesson}</p>
+            <p className="text-[12.5px] text-slate-600 dark:text-slate-300 leading-relaxed break-words"><HighlightText text={entry.lesson} query={query} /></p>
           </div>
         )}
 
@@ -1940,10 +2038,17 @@ function EntryCard({ cfg, entry, onEdit, onDelete, onToggleFavorite, categoryMap
           <div className="mt-3 flex items-center flex-wrap gap-1.5">
             {entry.tags.map(t => (
               <span key={t} className="inline-flex items-center gap-1 text-[10.5px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                <TagIcon size={9} /> {t}
+                <TagIcon size={9} /> <HighlightText text={t} query={query} />
               </span>
             ))}
           </div>
+        )}
+
+        {entry.sourceNoteIds && entry.sourceNoteIds.length > 0 && (
+          <button onClick={() => onViewSource(entry)}
+            className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 dark:text-slate-500 hover:text-[#45C4B0] active:scale-95 transition-transform">
+            <Inbox size={11} /> 원본 빠른 기록 보기
+          </button>
         )}
       </div>
     </div>
@@ -2353,7 +2458,7 @@ function DayDetailSheet({ open, dateKey, cfg, categoryMap, dayEntries, dayNotes,
   );
 }
 
-function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, onEdit, onDelete, onToggleFavorite, onRestore, onPermanentDelete, hasArchives, archivesLoaded, archiveLoading, onLoadArchives }) {
+function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, onEdit, onDelete, onToggleFavorite, onRestore, onPermanentDelete, onViewSource, hasArchives, archivesLoaded, archiveLoading, onLoadArchives }) {
   const [query, setQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -2362,10 +2467,12 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
-  const [view, setView] = useState('list'); // 'list' | 'calendar' | 'project'
+  const [view, setView] = useState('list'); // 'list' | 'calendar' | 'project' | 'highlights'
   const [calDate, setCalDate] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [selectedDay, setSelectedDay] = useState(null); // 'YYYY-MM-DD' | null — 바텀시트에 표시 중인 날짜
   const [timelineProject, setTimelineProject] = useState(null);
+  const [yearToggles, setYearToggles] = useState({}); // 프로젝트별 보기에서 연도 그룹을 펼쳤는지 여부 (직접 클릭해서 바꾼 것만 기록)
+  const [highlightYear, setHighlightYear] = useState(() => new Date().getFullYear());
 
   // 휴지통(삭제된) 항목은 목록/달력/통계/필터/타임라인 등 모든 일반 화면에서 제외하고, 아래 휴지통 화면에서만 보여줌
   const activeEntries = useMemo(() => entries.filter(e => !e.deleted), [entries]);
@@ -2414,6 +2521,33 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
       .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || 0) - (b.createdAt || 0));
   }, [activeEntries, timelineProject]);
 
+  // "프로젝트별" 보기 — 프로젝트가 많아질 걸 대비해 연도별로 묶어서, 최근 연도만 기본으로 펼쳐둠
+  const projectsByYear = useMemo(() => {
+    const map = new Map();
+    activeEntries.forEach(e => {
+      if (!e.title) return;
+      if (!map.has(e.title) || (e.date || '') > map.get(e.title)) map.set(e.title, e.date || '');
+    });
+    const sorted = [...map.entries()].sort((a, b) => b[1].localeCompare(a[1]));
+    const groups = [];
+    const byYear = new Map();
+    sorted.forEach(([title, date]) => {
+      const year = date ? date.slice(0, 4) : '날짜 없음';
+      if (!byYear.has(year)) { const g = { year, projects: [] }; byYear.set(year, g); groups.push(g); }
+      byYear.get(year).projects.push(title);
+    });
+    return groups;
+  }, [activeEntries]);
+  const isYearOpen = (year, idx) => (yearToggles[year] !== undefined ? yearToggles[year] : idx === 0);
+  const toggleYear = (year, idx) => setYearToggles(prev => ({ ...prev, [year]: !isYearOpen(year, idx) }));
+
+  // "하이라이트" 보기 — 즐겨찾기 또는 중요도 "상"만 골라 연도 단위로 보여줌 (이력서·연말 회고용)
+  const highlightEntries = useMemo(() => {
+    const y = String(highlightYear);
+    return activeEntries.filter(e => (e.favorite || e.importance === '상') && (e.date || '').startsWith(y))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+  }, [activeEntries, highlightYear]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return activeEntries
@@ -2445,14 +2579,14 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
         </button>
       )}
 
-      {(activeEntries.length > 0 || trashedEntries.length > 0) && (
+      {(activeEntries.length > 0 || trashedEntries.length > 0 || showTrash) && (
         <div className="flex items-center justify-between px-0.5">
           <span className="text-[11.5px] text-slate-400 dark:text-slate-500 font-mono">
             {showTrash ? `휴지통 ${trashedEntries.length}건` : `${activeEntries.length}건`}
           </span>
           <button onClick={() => setShowTrash(v => !v)}
             className="text-[11.5px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 inline-flex items-center gap-1">
-            <TrashIcon size={11} /> {showTrash ? '목록으로' : `휴지통${trashedEntries.length > 0 ? ` (${trashedEntries.length})` : ''}`}
+            {showTrash ? <ArrowLeft size={11} /> : <TrashIcon size={11} />} {showTrash ? '목록으로' : `휴지통${trashedEntries.length > 0 ? ` (${trashedEntries.length})` : ''}`}
           </button>
         </div>
       )}
@@ -2526,6 +2660,10 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${view === 'project' ? 'bg-[#45C4B0]/15 text-[#0f7a6c] dark:text-[#45C4B0]' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
           <FolderKanban size={13} /> 프로젝트별
         </button>
+        <button onClick={() => setView('highlights')}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${view === 'highlights' ? 'bg-[#45C4B0]/15 text-[#0f7a6c] dark:text-[#45C4B0]' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+          <Star size={13} /> 하이라이트
+        </button>
       </div>
 
       {view === 'calendar' ? (
@@ -2547,17 +2685,34 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
         </React.Fragment>
       ) : view === 'project' ? (
         <React.Fragment>
-          {projectsByRecency.length === 0 ? (
+          {projectsByYear.length === 0 ? (
             <div className="text-center py-14 text-slate-400 dark:text-slate-500 text-[13px]">아직 프로젝트가 없습니다.</div>
           ) : (
             <React.Fragment>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {projectsByRecency.map(p => (
-                  <button key={p} onClick={() => setTimelineProject(p)}
-                    className={`px-2.5 py-1.5 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors ${timelineProject === p ? 'bg-[#45C4B0] text-[#1a1206]' : 'bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'}`}>
-                    {p}
-                  </button>
-                ))}
+              <div className="space-y-2.5">
+                {projectsByYear.map((g, idx) => {
+                  const open = isYearOpen(g.year, idx);
+                  return (
+                    <div key={g.year}>
+                      <button onClick={() => toggleYear(g.year, idx)}
+                        className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 active:scale-95 transition-transform mb-1.5">
+                        <ChevronDown size={12} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                        {g.year === '날짜 없음' ? g.year : `${g.year}년`}
+                        <span className="text-slate-400 dark:text-slate-500 font-normal">· {g.projects.length}개</span>
+                      </button>
+                      {open && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {g.projects.map(p => (
+                            <button key={p} onClick={() => setTimelineProject(p)}
+                              className={`px-2.5 py-1.5 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors ${timelineProject === p ? 'bg-[#45C4B0] text-[#1a1206]' : 'bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'}`}>
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {timelineEntries.length > 0 && (
@@ -2595,6 +2750,31 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
             </React.Fragment>
           )}
         </React.Fragment>
+      ) : view === 'highlights' ? (
+        <React.Fragment>
+          <div className="flex items-center justify-between px-0.5">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setHighlightYear(y => y - 1)} className="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all"><ArrowLeft size={15} /></button>
+              <span className="text-[13.5px] font-semibold text-slate-700 dark:text-slate-200">{highlightYear}년 하이라이트</span>
+              <button onClick={() => setHighlightYear(y => y + 1)} disabled={highlightYear >= new Date().getFullYear()}
+                className="p-1.5 rounded-md text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 disabled:opacity-30 disabled:active:scale-100 transition-all"><ArrowRight size={15} /></button>
+            </div>
+            {highlightYear !== new Date().getFullYear() && (
+              <button onClick={() => setHighlightYear(new Date().getFullYear())}
+                className="text-[11px] font-medium px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">올해로</button>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 px-0.5 -mt-1">즐겨찾기 또는 중요도 "상"으로 표시한 일지만 모아서 보여줘요 — 이력서·연말 회고에 쓰기 좋아요.</p>
+          {highlightEntries.length === 0 ? (
+            <div className="text-center py-14 text-slate-400 dark:text-slate-500 text-[13px]">
+              {highlightYear}년에는 즐겨찾기하거나 중요도 "상"으로 표시한 일지가 없어요.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {highlightEntries.map(entry => <EntryCard key={entry.id} cfg={cfg} entry={entry} query="" onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} onViewSource={onViewSource} categoryMap={categoryMap} />)}
+            </div>
+          )}
+        </React.Fragment>
       ) : (
       <React.Fragment>
       {activeEntries.length > 0 && (
@@ -2618,7 +2798,7 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(entry => <EntryCard key={entry.id} cfg={cfg} entry={entry} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} categoryMap={categoryMap} />)}
+          {filtered.map(entry => <EntryCard key={entry.id} cfg={cfg} entry={entry} query={query} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} onViewSource={onViewSource} categoryMap={categoryMap} />)}
         </div>
       )}
       </React.Fragment>
@@ -2755,6 +2935,7 @@ function App() {
   const pendingDeleteTimersRef = useRef({}); // id -> timeoutId
   const [editingEntry, setEditingEntry] = useState(null);
   const [prefillNote, setPrefillNote] = useState(null); // 빠른 기록에서 "일지로 정리하기"로 열었을 때만 값이 있음
+  const [editingNote, setEditingNote] = useState(null); // 빠른 기록 수정 모달 — 업무일지 카드에서 "원본 보기"로도 열 수 있어서 App에서 관리
 
   const notifiedRef = useRef(false);
   const toastIdRef = useRef(0);
@@ -2994,7 +3175,7 @@ function App() {
           날짜: e.date || '', 프로젝트: e.title || '', 카테고리: e.category || '', 중요도: e.importance || '',
           발생문제: e.problem || '', 해결과정: e.solution || '', 배운점: e.lesson || '',
           주요성과: (e.bullets || []).filter(Boolean).join(' / '), 태그: (e.tags || []).join(', '),
-          즐겨찾기: e.favorite ? 'Y' : '', 휴지통: e.deleted ? 'Y' : '', 레포: repoLabel,
+          즐겨찾기: e.favorite ? 'Y' : '', 휴지통: e.deleted ? 'Y' : '', 저장소: repoLabel,
         }));
       };
       pushEntryRows(data.entries, '');
@@ -3008,7 +3189,7 @@ function App() {
           const d = n.createdAt ? new Date(n.createdAt) : null;
           noteRows.push({
             날짜: d ? dateKeyFromDate(d) : '', 시간: d ? fmtTime(n.createdAt) : '',
-            내용: n.text || '', 정리됨: n.processed ? 'Y' : '', 휴지통: n.deleted ? 'Y' : '', 레포: repoLabel,
+            내용: n.text || '', 정리됨: n.processed ? 'Y' : '', 휴지통: n.deleted ? 'Y' : '', 저장소: repoLabel,
           });
         });
       };
@@ -3042,7 +3223,7 @@ function App() {
 
   // 엑셀 다시 불러오기 — 항상 "새 행만 추가", 기존 기록은 절대 수정/삭제하지 않음.
   // 1) 이미 앱에 있는 것과 내용이 완전히 같은 행은 자동으로 건너뜀(중복 방지)
-  // 2) "레포" 칸에 값이 있는 행(=보관 레포에서 나온 것)은 건너뜀 — 이미 그 레포에 안전하게 있으므로
+  // 2) "저장소" 칸에 값이 있는 행(=보관 저장소에서 나온 것)은 건너뜀 — 이미 그 저장소에 안전하게 있으므로
   const handleImportExcel = async file => {
     if (!cfg || !file) return;
     if (typeof XLSX === 'undefined') {
@@ -3063,7 +3244,7 @@ function App() {
       const existingEntryFp = new Set(entries.map(e => `${e.date}|${e.title}|${e.problem || ''}|${e.solution || ''}`));
       const newEntries = [];
       readSheet('업무일지').forEach(row => {
-        if (S(row['레포'])) return; // 보관 레포에서 나온 행은 건너뜀
+        if (S(row['저장소'])) return; // 보관 저장소에서 나온 행은 건너뜀
         const date = S(row['날짜']), title = S(row['프로젝트']);
         if (!date || !title) return; // 필수값 없는 행은 건너뜀
         const problem = S(row['발생문제']), solution = S(row['해결과정']);
@@ -3091,7 +3272,7 @@ function App() {
       const existingNoteFp = new Set(quickNotes.map(n => `${dateKeyFromDate(new Date(n.createdAt || 0))}|${fmtTime(n.createdAt)}|${n.text || ''}`));
       const newNotes = [];
       readSheet('빠른기록').forEach(row => {
-        if (S(row['레포'])) return;
+        if (S(row['저장소'])) return;
         const text = S(row['내용']);
         if (!text) return;
         const fp = `${S(row['날짜'])}|${S(row['시간'])}|${text}`;
@@ -3531,6 +3712,22 @@ function App() {
   };
   const closeModal = () => { setModalOpen(false); setEditingEntry(null); setPrefillNote(null); };
 
+  // 빠른 기록 카드에서 "일지 보기" — 연결된 일지를 찾아 업무일지 탭으로 이동 후 수정 모달을 엶
+  const handleViewLinkedEntry = note => {
+    const entry = displayEntries.find(e => e.id === note.linkedEntryId);
+    if (!entry) { showToast('연결된 일지를 찾을 수 없어요. 삭제되었거나, 아직 안 불러온 보관 레포에 있을 수 있어요.'); return; }
+    setTab('entries');
+    openEditEntry(entry);
+  };
+  // 업무일지 카드에서 "원본 빠른 기록 보기" — 정리하기 전 원본 기록을 찾아 빠른 기록 탭으로 이동 후 보여줌
+  const handleViewSourceNote = entry => {
+    const noteId = entry.sourceNoteIds && entry.sourceNoteIds[0];
+    const note = noteId ? displayNotes.find(n => n.id === noteId) : null;
+    if (!note) { showToast('원본 빠른 기록을 찾을 수 없어요. 삭제되었거나, 아직 안 불러온 보관 레포에 있을 수 있어요.'); return; }
+    setTab('quick');
+    setEditingNote(note);
+  };
+
   const handleSaveEntry = async data => {
     const { keepImages, newFiles, ...fields } = data;
     try {
@@ -3703,27 +3900,42 @@ function App() {
             </div>
           ) : (
           <React.Fragment>
-          {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={displayNotes} phrases={phrases} onAdd={handleAddNote} onDelete={handleDeleteNote} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDeleteNote} onEditSave={handleEditNoteSave} onPromote={handlePromote} uploading={uploading} savingEdit={savingNoteEdit} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
+          {tab === 'quick' && <QuickCaptureTab cfg={cfg} notes={displayNotes} phrases={phrases} editingNote={editingNote} onEditNote={setEditingNote} onAdd={handleAddNote} onDelete={handleDeleteNote} onRestore={handleRestoreNote} onPermanentDelete={handlePermanentDeleteNote} onEditSave={handleEditNoteSave} onPromote={handlePromote} onViewEntry={handleViewLinkedEntry} uploading={uploading} savingEdit={savingNoteEdit} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
           {tab === 'todos' && <TodoTab todos={visibleTodos} onAdd={handleAddTodo} onToggle={handleToggleTodo} onDelete={handleDeleteTodo} onEdit={handleEditTodo} onClearDone={handleClearDoneTodos} />}
-          {tab === 'entries' && <EntriesTab cfg={cfg} entries={displayEntries} notes={displayNotes} categories={allCategories} categoryMap={allCategoryMap} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} onToggleFavorite={handleToggleFavorite} onRestore={handleRestoreEntry} onPermanentDelete={handlePermanentDeleteEntry} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
+          {tab === 'entries' && <EntriesTab cfg={cfg} entries={displayEntries} notes={displayNotes} categories={allCategories} categoryMap={allCategoryMap} onOpenNew={openNewEntry} onEdit={openEditEntry} onDelete={handleDeleteEntry} onToggleFavorite={handleToggleFavorite} onRestore={handleRestoreEntry} onPermanentDelete={handlePermanentDeleteEntry} onViewSource={handleViewSourceNote} hasArchives={hasArchives} archivesLoaded={archivesLoaded} archiveLoading={archiveLoading} onLoadArchives={loadArchives} />}
           {tab === 'settings' && (
-            <div className="space-y-4">
-              <SettingsPanel embedded initial={cfg} onSave={handleSaveConfig} onDisconnect={handleDisconnect} />
-              <DataExportPanel onExport={handleExportData} onExportExcel={handleExportExcel} onImportExcel={handleImportExcel} exporting={exporting} importing={importing} />
-              <RepoUsagePanel cfg={cfg} />
-              <RepoArchivePanel cfg={cfg} onRotate={handleRotateRepo} />
-              <CategoryManager customCategories={customCategories} onAdd={handleAddCategory} onDelete={handleDeleteCategory} />
-              <PhraseManager phrases={phrases} onAdd={handleAddPhrase} onDelete={handleDeletePhrase} />
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300"><BellIcon size={14} /> 할 일 알림</div>
-                  <button onClick={requestNotifPermission} className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform">권한 요청</button>
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
-                  이 앱을 열어뒀을 때만 뜨는 알림이에요. 폰이 잠겨있거나 앱을 닫았을 때 울리는 진짜 알람은 아닙니다.
-                </p>
+            <div className="space-y-6">
+              <div className="space-y-2.5">
+                <SettingsSectionHeader icon={Key} label="계정 연결" />
+                <SettingsPanel embedded initial={cfg} onSave={handleSaveConfig} onDisconnect={handleDisconnect} />
               </div>
-              <p className="text-center text-[10.5px] font-mono text-slate-300 dark:text-slate-700 pt-1">업무일지 {APP_VERSION}</p>
+
+              <div className="space-y-2.5">
+                <SettingsSectionHeader icon={DatabaseIcon} label="데이터 관리" />
+                <DataExportPanel onExport={handleExportData} onExportExcel={handleExportExcel} onImportExcel={handleImportExcel} exporting={exporting} importing={importing} />
+                <RepoUsagePanel cfg={cfg} />
+                <RepoArchivePanel cfg={cfg} onRotate={handleRotateRepo} />
+              </div>
+
+              <div className="space-y-2.5">
+                <SettingsSectionHeader icon={TagIcon} label="커스터마이즈" />
+                <CategoryManager customCategories={customCategories} onAdd={handleAddCategory} onDelete={handleDeleteCategory} />
+                <PhraseManager phrases={phrases} onAdd={handleAddPhrase} onDelete={handleDeletePhrase} />
+              </div>
+
+              <div className="space-y-2.5">
+                <SettingsSectionHeader icon={SettingsIcon} label="기타" />
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300"><BellIcon size={14} /> 할 일 알림</div>
+                    <button onClick={requestNotifPermission} className="text-[11.5px] font-medium px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform">권한 요청</button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
+                    이 앱을 열어뒀을 때만 뜨는 알림이에요. 폰이 잠겨있거나 앱을 닫았을 때 울리는 진짜 알람은 아닙니다.
+                  </p>
+                </div>
+                <p className="text-center text-[10.5px] font-mono text-slate-300 dark:text-slate-700 pt-1">업무일지 {APP_VERSION}</p>
+              </div>
             </div>
           )}
           </React.Fragment>
