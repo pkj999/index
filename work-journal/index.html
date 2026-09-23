@@ -78,6 +78,41 @@
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
+/* ===============================================================================
+   업무일지(Work Journal) — 전체 구조 지도
+   ===============================================================================
+   빌드 도구 없이 브라우저에서 바로 Babel로 변환되는 "단일 HTML 파일" 앱입니다.
+   (별도 서버 없이 GitHub Pages에 index.html/sw.js만 올리면 동작하게 하려고 이렇게 만듦)
+   그래서 파일을 여러 개로 쪼개는 대신, 아래처럼 하나의 파일 안에서
+   "섹션 주석"으로 영역을 나누는 방식으로 구조를 잡았습니다. 코드를 찾을 땐
+   이 지도에서 섹션 이름으로 먼저 훑고, Ctrl+F로 그 섹션 제목을 검색하면 빠릅니다.
+
+   ── 데이터가 저장되는 곳 ──────────────────────────────────────────────
+   실제 기록은 이 파일 안이 아니라 GitHub의 "데이터 저장소"(비공개 레포)에
+   JSON 파일로 저장됩니다 (data/entries.json, data/quick-notes.json 등 —
+   PATH_* 상수 목록 참고). 이 파일은 그 저장소를 읽고 쓰는 "화면"일 뿐입니다.
+
+   ── 섹션 순서 (위에서 아래로) ─────────────────────────────────────────
+   1. 아이콘            — 아이콘 이름 → SVG 경로 매핑 (ICON_PATHS), 컴포넌트별 상수
+   2. 상수/설정          — 저장 경로(PATH_*), 기본 카테고리, 중요도 등급 등
+   3. GitHub API 연동    — ghFetch/ghGetJSON/ghPutJSON/ghPutImage 등 저장소 읽고 쓰는 저수준 함수들
+   4. 다중 저장소(보관) 헬퍼 — 저장소 로테이션(전환) 시 예전 저장소를 읽기 전용으로 다루는 유틸
+   5. 이미지 유틸        — 파일→base64 변환, 확장자 판별, uploadNewImages(공용 업로드 함수)
+   6. 작은 공용 컴포넌트  — Toast, 뱃지, 아이콘 버튼, HighlightText(검색어 강조) 등
+   7. 빠른 기록 탭 컴포넌트 — QuickNoteCard, NoteEditModal, QuickCaptureTab
+   8. 할 일 탭 컴포넌트   — TodoTab
+   9. 업무일지 탭 컴포넌트 — EntryCard, EntryFormModal, EntriesTab, 달력/타임라인/하이라이트 뷰
+   10. 설정 탭 컴포넌트   — SettingsPanel(계정 연결), RepoUsagePanel, RepoArchivePanel,
+                          DataExportPanel(백업/엑셀), CategoryManager, PhraseManager
+   11. App 루트 컴포넌트  — 모든 상태(entries/notes/todos 등)를 들고 있는 최상위 컴포넌트.
+                          하위 섹션은 App 컴포넌트 안의 번호 주석(1. 상태 선언 / 2. 토스트 …)으로
+                          더 세분화되어 있으니, App 안에서 뭔가 찾을 땐 그 번호 주석을 따라가면 됨.
+
+   ── 데이터 흐름을 한 줄로 ────────────────────────────────────────────
+   화면에서 뭔가 저장/수정/삭제 → App의 handle* 함수가 mutateX/removeX/writeActiveX 같은
+   "쓰기 헬퍼"를 호출 → 그 헬퍼가 GitHub API로 저장 → 성공하면 React 상태(entries 등)를
+   갱신 → 화면이 새로 그려짐. 이 순서를 알아두면 새 기능을 어디에 붙여야 할지 헷갈리지 않습니다.
+=============================================================================== */
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
 const { createRoot } = ReactDOM;
 
@@ -195,7 +230,7 @@ const Upload = mkIcon('upload');
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'ver.2 · 2026-09-23';
+const APP_VERSION = 'ver.3 · 2026-09-23';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -530,6 +565,21 @@ function extFromFile(file) {
   if (byType[file.type]) return byType[file.type];
   const parts = (file.name || '').split('.');
   return parts.length > 1 ? parts.pop().toLowerCase() : 'jpg';
+}
+
+/* 사진 파일 목록을 하나씩 원본 화질 그대로 레포에 올리고, 저장에 쓸 경로 배열을 돌려줌.
+   (빠른 기록 작성/수정, 업무일지 작성/수정 — 총 4곳에서 똑같이 하던 걸 하나로 모은 것.
+    사진 하나당 파일명은 "시각-랜덤값.확장자"로 지어서 겹칠 일이 없게 함) */
+async function uploadNewImages(writeCfg, files, message) {
+  const paths = [];
+  for (const file of files) {
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    const base64Content = await fileToBase64(file);
+    const path = `images/${id}.${extFromFile(file)}`;
+    await ghPutImage(writeCfg, path, base64Content, message);
+    paths.push(path);
+  }
+  return paths;
 }
 
 /* 이미지 참조 형식 호환 — 새 데이터는 문자열 경로 하나(원본 화질 파일 1개, 목록 미리보기와 원본이 동일 파일).
@@ -3518,14 +3568,7 @@ function App() {
   const handleAddNote = async (text, files) => {
     setUploading(true);
     try {
-      const imageRefs = [];
-      for (const file of files) {
-        const id = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-        const origB64 = await fileToBase64(file);
-        const path = `images/${id}.${extFromFile(file)}`;
-        await ghPutImage(cfg, path, origB64, '빠른 기록 사진 추가');
-        imageRefs.push(path);
-      }
+      const imageRefs = await uploadNewImages(cfg, files, '빠른 기록 사진 추가');
       const newNote = { id: uid(), text, imageRefs, processed: false, linkedEntryId: null, createdAt: Date.now(), _repo: activeTag, _readonly: false };
       const merged = await writeActiveNotes(current => [newNote, ...current], '빠른 기록 추가');
       markPending(cfg, 'notes', newNote); // GitHub 읽기 반영 지연 대비 — 새로고침해도 잠깐 안 사라지게
@@ -3574,14 +3617,7 @@ function App() {
     setSavingNoteEdit(true);
     try {
       const writeCfg = repoCfgFor(cfg, note._repo);
-      const uploadedRefs = [];
-      for (const file of newFiles) {
-        const id = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-        const origB64 = await fileToBase64(file);
-        const path = `images/${id}.${extFromFile(file)}`;
-        await ghPutImage(writeCfg, path, origB64, '빠른 기록 사진 추가');
-        uploadedRefs.push(path);
-      }
+      const uploadedRefs = await uploadNewImages(writeCfg, newFiles, '빠른 기록 사진 추가');
       // 편집 중 사용자가 빼버린 기존 사진은 다른 곳에서 안 쓰고 있으면 레포에서도 삭제
       const keepSet = new Set(keepImages.map(k => imgPaths(k).thumb));
       const removedRefs = (note.imageRefs || []).filter(old => !keepSet.has(imgPaths(old).thumb));
@@ -3782,14 +3818,7 @@ function App() {
     try {
       if (editingEntry) {
         const writeCfg = repoCfgFor(cfg, editingEntry._repo);
-        const uploadedRefs = [];
-        for (const file of newFiles) {
-          const id = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-          const b64 = await fileToBase64(file);
-          const path = `images/${id}.${extFromFile(file)}`;
-          await ghPutImage(writeCfg, path, b64, '업무일지 사진 추가');
-          uploadedRefs.push(path);
-        }
+        const uploadedRefs = await uploadNewImages(writeCfg, newFiles, '업무일지 사진 추가');
         // 수정 중 사용자가 빼버린 기존 사진은 다른 곳에서 안 쓰고 있으면 레포에서도 삭제
         const keepSet = new Set(keepImages.map(k => imgPaths(k).thumb));
         const removedRefs = (editingEntry.images || []).filter(old => !keepSet.has(imgPaths(old).thumb));
@@ -3806,14 +3835,7 @@ function App() {
       const now = Date.now();
       const targetRepo = (prefillNote && prefillNote._readonly) ? prefillNote._repo : activeTag;
       const writeCfg = repoCfgFor(cfg, targetRepo);
-      const uploadedRefs = [];
-      for (const file of newFiles) {
-        const id = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-        const b64 = await fileToBase64(file);
-        const path = `images/${id}.${extFromFile(file)}`;
-        await ghPutImage(writeCfg, path, b64, '업무일지 사진 추가');
-        uploadedRefs.push(path);
-      }
+      const uploadedRefs = await uploadNewImages(writeCfg, newFiles, '업무일지 사진 추가');
       const newEntry = {
         id: uid(), ...fields, images: [...keepImages, ...uploadedRefs], sourceNoteIds: prefillNote ? [prefillNote.id] : [],
         createdAt: now, updatedAt: now, _repo: targetRepo, _readonly: !!(prefillNote && prefillNote._readonly),
