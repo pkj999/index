@@ -75,6 +75,53 @@
 </style>
 </head>
 <body class="font-sans">
+<script>
+  // 뒤로가기 "한 번 더 누르면 종료" 가드 — 이 앱은 스크립트 전체를 브라우저에서 매번 Babel로
+  // 변환하는 구조라(4000줄 넘음), 그 변환이 끝나기 전에 안드로이드가 "이 화면에서 뒤로 갈 수 있는지"를
+  // 먼저 판단해버리면 아래 아무리 정확한 로직도 이미 늦을 수 있음. 그래서 이 부분만은 Babel 스크립트보다
+  // 앞서, 최대한 빨리(순수 JS로) 실행되도록 따로 떼어 맨 위에 둠. React 쪽(useBackButtonClose)은
+  // 여기서 만든 전역 값들을 그대로 이어받아 씀.
+  window.wjOverlayStack = []; // [{ id, onClose }] — 가장 나중에 연 오버레이가 배열 끝
+  window.wjSuppressNextPop = 0; // 버튼으로 닫으면서 직접 history.back()을 부를 때, 그로 인한 popstate는 한 번 무시
+  window.wjOverlayIdSeq = 0;
+
+  var WJ_EXIT_WINDOW_MS = 2000;
+  var wjLastHomeBackAt = 0;
+
+  // 오버레이가 없을 때 종료 방지용 가드를 다시 쌓는 함수 — 여러 시점에서 공통으로 호출함.
+  // 이미 가드 위에 있으면(아직 안 소진됐으면) 중복으로 더 쌓지 않음.
+  function wjArmExitGuard() {
+    if (window.wjOverlayStack.length === 0 && !(window.history.state && window.history.state.wjHomeGuard)) {
+      window.history.pushState({ wjHomeGuard: true }, '');
+    }
+  }
+  wjArmExitGuard(); // 스크립트가 로드되는 즉시(=Babel 변환을 기다리지 않고) 가드를 한 번 쌓아둠
+
+  window.addEventListener('popstate', function () {
+    if (window.wjSuppressNextPop > 0) { window.wjSuppressNextPop--; return; }
+    var top = window.wjOverlayStack.pop();
+    if (top) { top.onClose(); return; }
+    // 여기 도달했다는 건 닫을 오버레이가 없다는 뜻 — 홈 화면에서 뒤로가기를 누른 것
+    var now = Date.now();
+    if (now - wjLastHomeBackAt < WJ_EXIT_WINDOW_MS) {
+      return; // 최근에 한 번 눌렀음 — 가드를 다시 안 쌓아서 이번엔 그대로 진행(종료)되게 둠
+    }
+    wjLastHomeBackAt = now;
+    wjArmExitGuard(); // 종료 취소 — 가드를 다시 쌓아 이번 뒤로가기를 흡수
+    window.dispatchEvent(new CustomEvent('wj-exit-hint')); // App(React)이 이 이벤트를 받아서 안내 토스트를 띄움
+  });
+
+  /* PWA를 껐다 켜거나 다른 앱 갔다 오면, 가드가 소진된 채로 남아있을 수 있어서 뒤로가기 한 번에
+     바로 꺼질 수 있음. 그래서 앱이 다시 활성화될 때(화면 보임/포커스/페이지 재표시) 뿐 아니라
+     백그라운드로 나가는 시점(pagehide/beforeunload)에도 미리 가드를 채워넣고,
+     혹시 그 신호들조차 못 잡는 경우를 대비해 화면이 보이는 동안 몇 초마다 한 번씩도 다시 확인함. */
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { wjLastHomeBackAt = 0; wjArmExitGuard(); } });
+  window.addEventListener('pageshow', function () { wjLastHomeBackAt = 0; wjArmExitGuard(); });
+  window.addEventListener('focus', function () { wjLastHomeBackAt = 0; wjArmExitGuard(); });
+  window.addEventListener('pagehide', function () { wjArmExitGuard(); });
+  window.addEventListener('beforeunload', function () { wjArmExitGuard(); });
+  setInterval(function () { if (document.visibilityState === 'visible') wjArmExitGuard(); }, 3000);
+</script>
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
@@ -230,7 +277,7 @@ const Upload = mkIcon('upload');
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'ver.6 · 2026-09-23';
+const APP_VERSION = 'ver.8 · 2026-09-23';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -596,54 +643,10 @@ function imgPaths(ref) {
      2) 모달 안에서 사진 확대(라이트박스)처럼 겹쳐 열렸을 때, 뒤로가기 한 번에 위/아래 모달이 같이 닫힘
    지금 방식은 열려있는 오버레이를 "스택"으로 관리해서, 열 때마다 히스토리를 하나씩 더 쌓고,
    뒤로가기 한 번은 정확히 "가장 최근에 연 오버레이 하나만" 닫는다.
+   (오버레이 스택 자체와 "홈에서 뒤로가기 두 번 = 종료" 가드는 body 맨 위의 순수 JS 스크립트에서
+   미리 만들어둠 — Babel 변환이 끝나기 전에도 즉시 동작해야 해서 이 스크립트보다 먼저 실행되게 분리함.
+   여기서는 그때 만들어진 전역값(window.wjOverlayStack 등)을 그대로 이어받아 씀.)
 =========================================================== */
-const wjOverlayStack = []; // [{ id, onClose }] — 가장 나중에 연 것이 배열 끝
-let wjSuppressNextPop = 0; // 버튼으로 닫으면서 우리가 직접 history.back()을 부를 때, 그로 인한 popstate는 한 번 무시
-let wjOverlayIdSeq = 0;
-
-/* 오버레이가 하나도 없는 "홈" 상태(설정 폼 등 모달이 전부 닫힌 상태)에서 뒤로가기를 누르면
-   예전엔 바로 앱이 꺼졌음. 지금은 히스토리에 "가드" 한 칸을 미리 쌓아둬서 첫 뒤로가기는
-   그 칸을 소비하는 것으로 흡수하고 "한 번 더 누르면 종료돼요" 안내만 띄운 뒤 가드를 다시 쌓는다.
-   안내가 뜬 지 얼마 안 돼서(WJ_EXIT_WINDOW_MS 이내) 또 뒤로가기를 누르면 이번엔 가드를 다시 안 쌓아서
-   실제로 종료(또는 더 뒤로 이동)되게 둔다. */
-const WJ_EXIT_WINDOW_MS = 2000;
-let wjLastHomeBackAt = 0;
-
-// 오버레이가 없을 때 종료 방지용 가드를 다시 쌓는 함수 — 여러 시점에서 공통으로 호출함.
-// 이미 가드 위에 있으면(아직 안 소진됐으면) 중복으로 더 쌓지 않음 — 몇 초마다 도는 주기 점검 때문에
-// 히스토리가 끝없이 불어나는 걸 방지.
-function wjArmExitGuard() {
-  if (wjOverlayStack.length === 0 && !(window.history.state && window.history.state.wjHomeGuard)) {
-    window.history.pushState({ wjHomeGuard: true }, '');
-  }
-}
-wjArmExitGuard(); // 앱 시작 시 가드를 한 번 쌓아둠
-
-window.addEventListener('popstate', () => {
-  if (wjSuppressNextPop > 0) { wjSuppressNextPop--; return; }
-  const top = wjOverlayStack.pop();
-  if (top) { top.onClose(); return; }
-  // 여기 도달했다는 건 닫을 오버레이가 없다는 뜻 — 홈 화면에서 뒤로가기를 누른 것
-  const now = Date.now();
-  if (now - wjLastHomeBackAt < WJ_EXIT_WINDOW_MS) {
-    return; // 최근에 한 번 눌렀음 — 가드를 다시 안 쌓아서 이번엔 그대로 진행(종료)되게 둠
-  }
-  wjLastHomeBackAt = now;
-  wjArmExitGuard(); // 종료 취소 — 가드를 다시 쌓아 이번 뒤로가기를 흡수
-  window.dispatchEvent(new CustomEvent('wj-exit-hint')); // App이 이 이벤트를 받아서 안내 토스트를 띄움
-});
-
-/* PWA를 "껐다 켰다" 하면(홈 버튼으로 나갔다가 다시 들어오는 등) 안드로이드가 페이지를 새로 불러오지 않고
-   멈춰있던 화면을 그대로 다시 보여주는 경우가 많음 — 이땐 위 스크립트가 다시 실행되지 않아서 가드가
-   재생성되지 않고, 지난 세션에서 가드가 이미 소진된 상태였다면 뒤로가기 한 번에 바로 꺼져버림.
-   그래서 앱이 다시 활성화될 때 잡을 수 있는 신호를 여러 개(화면 보임/포커스/페이지 재표시) 동시에 걸어두고,
-   혹시 그 신호들조차 못 잡는 기기가 있을 걸 대비해서 화면이 보이는 동안엔 몇 초마다 한 번씩
-   가드가 비어있지 않은지 스스로 다시 채워넣도록 이중 삼중으로 안전장치를 둠. */
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wjLastHomeBackAt = 0; wjArmExitGuard(); } });
-window.addEventListener('pageshow', () => { wjLastHomeBackAt = 0; wjArmExitGuard(); });
-window.addEventListener('focus', () => { wjLastHomeBackAt = 0; wjArmExitGuard(); });
-setInterval(() => { if (document.visibilityState === 'visible') wjArmExitGuard(); }, 3000);
-
 function useBackButtonClose(open, onClose) {
   const idRef = useRef(null);
   if (idRef.current === null) idRef.current = ++wjOverlayIdSeq;
@@ -1136,7 +1139,7 @@ function DataExportPanel({ onExport, onExportExcel, onImportExcel, onImportJson,
         </button>
       </div>
       <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
-        <strong>엑셀</strong>은 일지·빠른 기록·할 일을 표로 정리해서 열어보고 필터·정렬하기 좋아요. <strong>JSON</strong>은 이 앱에 있는 데이터를 그대로 담은 비상용 백업이에요. 둘 다 사진 원본은 포함되지 않아요(저장소에 그대로 남아있어요) — 보관된 저장소까지 전부 포함해서 내보내요.
+        엑셀은 표로 열어보기 좋고, JSON은 비상용 백업이에요. 사진은 둘 다 안 들어가요.
       </p>
 
       <div className="border-t border-slate-100 dark:border-slate-800 mt-3 pt-3">
@@ -1148,7 +1151,7 @@ function DataExportPanel({ onExport, onExportExcel, onImportExcel, onImportJson,
           {importing ? '가져오는 중…' : '엑셀 파일에서 가져오기'}
         </button>
         <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
-          내보낸 형식 그대로만 인식해요. <strong>항상 새 행으로만 추가</strong>되고 기존 기록은 절대 안 바뀌어요 — 이미 있는 것과 완전히 같은 내용이거나, "저장소" 칸에 값이 있는 행(보관 저장소에서 나온 것)은 자동으로 건너뛰어요. <strong>사진은 엑셀 파일 안에 들어있지 않아서, 가져와도 사진 없이 텍스트만 추가돼요.</strong>
+          새 항목만 추가돼요. 사진은 안 들어와요.
         </p>
       </div>
 
@@ -1161,7 +1164,7 @@ function DataExportPanel({ onExport, onExportExcel, onImportExcel, onImportJson,
           {importing ? '가져오는 중…' : 'JSON 백업에서 복원하기'}
         </button>
         <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1.5 leading-relaxed">
-          이 앱에서 내보낸 JSON 백업 파일만 인식해요. 엑셀과 마찬가지로 <strong>항상 새 항목으로만 추가</strong>되고 기존 기록은 절대 안 바뀌어요 — 이미 있는 것과 완전히 같은 내용은 자동으로 건너뛰어요. 엑셀과 달리 즐겨찾기·태그·연결된 빠른 기록/일지 관계까지 그대로 복원되고, <strong>같은 저장소로 복원하는 경우엔 사진도 정상적으로 보여요</strong>(다른 저장소로 복원하면 사진 경로만 살아있고 화면엔 안 보일 수 있어요).
+          새 항목만 추가돼요. 즐겨찾기·태그·연결관계까지 복원되고, 같은 저장소면 사진도 보여요.
         </p>
       </div>
     </div>
@@ -1325,7 +1328,7 @@ function PhraseManager({ phrases, onAdd, onDelete }) {
       <div className="flex items-center gap-2 mb-2.5">
         <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()}
           placeholder="예: 회의 참석, 코드 리뷰 진행"
-          className="flex-1 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+          className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
         <button onClick={handleAdd} disabled={!text.trim()}
           className="p-2 rounded-md bg-[#45C4B0] text-[#1a1206] active:scale-90 disabled:opacity-40 disabled:active:scale-100 transition-all">
           <Plus size={14} strokeWidth={2.5} />
@@ -2438,7 +2441,7 @@ function EntryFormModal({ open, initial, prefillNote, cfg, existingProjects, exi
             <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">프로젝트 / 업무명</label>
             <ComboBoxInput value={form.title} onChange={v => setForm(f => ({ ...f, title: v }))}
               suggestions={existingProjects || []}
-              placeholder="예: 노광 CHUCK 흑색 용사코팅 반사율 이슈 대응" />
+              placeholder="예: ○○ 설비 트러블슈팅 대응" />
             <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1 leading-relaxed">
               같은 프로젝트는 이전에 썼던 이름 그대로 써주세요 — 오타가 나면 다른 프로젝트로 나뉘어요. 입력하면 기존 이름이 밑에 후보로 떠요.
             </p>
@@ -2451,7 +2454,7 @@ function EntryFormModal({ open, initial, prefillNote, cfg, existingProjects, exi
                 <div key={idx} className="flex items-center gap-1.5">
                   <span className="w-1 h-1 rounded-full bg-slate-400 shrink-0" />
                   <input type="text" value={b} onChange={e => updateBullet(idx, e.target.value)} placeholder="한 일을 입력하세요"
-                    className="flex-1 px-2.5 py-1.5 rounded-md text-[13px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+                    className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[13px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
                   {form.bullets.length > 1 && <button type="button" onClick={() => removeBullet(idx)} className="p-2 text-slate-400 hover:text-red-500 shrink-0 active:scale-90 transition-transform"><X size={15} /></button>}
                 </div>
               ))}
@@ -2492,7 +2495,7 @@ function EntryFormModal({ open, initial, prefillNote, cfg, existingProjects, exi
                   <input type="text" value={l.label} onChange={e => updateLink(idx, 'label', e.target.value)} placeholder="이름(선택)"
                     className="w-24 shrink-0 px-2 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
                   <input type="url" value={l.url} onChange={e => updateLink(idx, 'url', e.target.value)} placeholder="https://…"
-                    className="flex-1 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+                    className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[12.5px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
                   <button type="button" onClick={() => removeLink(idx)} className="p-2 text-slate-400 hover:text-red-500 shrink-0 active:scale-90 transition-transform"><X size={15} /></button>
                 </div>
               ))}
