@@ -62,8 +62,8 @@
   .wj-modal-pop { animation: wj-pop 0.18s ease both; }
   @keyframes wj-spin { to { transform: rotate(360deg); } }
   .wj-spin { animation: wj-spin 0.8s linear infinite; }
-  @keyframes wj-check-bounce { 0% { transform: scale(1); } 45% { transform: scale(1.35); } 100% { transform: scale(1); } }
-  .wj-check-bounce { animation: wj-check-bounce 0.38s cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes wj-check-bounce { 0% { transform: scale(1); } 45% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  .wj-check-bounce { animation: wj-check-bounce 0.22s ease-out both; }
   @keyframes wj-item-leave { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.94); } }
   .wj-item-leaving { animation: wj-item-leave 0.22s ease forwards; }
   @keyframes wj-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
@@ -278,7 +278,7 @@ const Upload = mkIcon('upload');
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'ver.15 · 2026-09-23';
+const APP_VERSION = 'ver.16 · 2026-09-23';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -2044,7 +2044,7 @@ function TagInput({ tags, onChange, suggestions, placeholder }) {
 
 function SelectPill({ value, onChange, options, placeholder, icon: Ico }) {
   return (
-    <div className="relative w-full sm:w-auto">
+    <div className="relative w-full">
       <select value={value} onChange={e => onChange(e.target.value)}
         className="w-full appearance-none pl-8 pr-7 py-2 rounded-lg text-xs font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 cursor-pointer transition-colors sm:max-w-[150px] truncate">
         <option value="">{placeholder}</option>
@@ -2927,13 +2927,13 @@ function EntriesTab({ cfg, entries, notes, categories, categoryMap, onOpenNew, o
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="업무명, 내용, 문제해결, 태그 검색…"
             className="w-full pl-9 pr-3 py-2 rounded-lg text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-700 dark:text-slate-200 focus:border-slate-400 dark:focus:border-slate-500 transition-colors" />
         </div>
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-stretch sm:items-center gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 items-stretch gap-2">
           <SelectPill value={projectFilter} onChange={setProjectFilter} options={projects} placeholder="전체 프로젝트" icon={FolderKanban} />
           <SelectPill value={categoryFilter} onChange={setCategoryFilter} options={categories.map(c => c.id)} placeholder="전체 카테고리" icon={Code2} />
           <SelectPill value={importanceFilter} onChange={setImportanceFilter} options={IMPORTANCE_LEVELS.map(i => i.id)} placeholder="전체 중요도" icon={AlertTriangle} />
           <SelectPill value={tagFilter} onChange={setTagFilter} options={allTags} placeholder="전체 태그" icon={TagIcon} />
           <button onClick={() => setFavoriteOnly(v => !v)}
-            className={`col-span-2 sm:col-auto inline-flex items-center justify-center sm:justify-start gap-1 px-2.5 py-2 rounded-lg text-xs font-medium border whitespace-nowrap shrink-0 transition-colors ${favoriteOnly ? 'border-[#E8A93B]/50 bg-[#E8A93B]/10 text-[#E8A93B]' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'}`}>
+            className={`col-span-2 sm:col-auto inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-lg text-xs font-medium border whitespace-nowrap transition-colors ${favoriteOnly ? 'border-[#E8A93B]/50 bg-[#E8A93B]/10 text-[#E8A93B]' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'}`}>
             <Star size={13} fill={favoriteOnly ? '#E8A93B' : 'none'} /> 즐겨찾기
           </button>
         </div>
@@ -4226,7 +4226,7 @@ function App() {
   return (
     <div className="h-[100dvh] flex flex-col bg-[#F7F7F9] dark:bg-[#0B0E13] transition-colors overflow-hidden">
       <div ref={scrollRef} onTouchStart={onPullTouchStart} onTouchMove={onPullTouchMove} onTouchEnd={onPullTouchEnd}
-        className="flex-1 overflow-y-auto overflow-x-hidden" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        className="flex-1 overflow-y-auto overflow-x-hidden" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', scrollbarGutter: 'stable' }}>
         <div className="flex items-center justify-center overflow-hidden transition-[height] duration-200 ease-out" style={{ height: pullY }}>
           <RefreshCw size={16} className={pullTriggeredRef.current || loading ? 'wj-spin text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-600'}
             style={pullTriggeredRef.current || loading ? undefined : { transform: `rotate(${Math.min(pullY / PULL_THRESHOLD, 1) * 360}deg)` }} />
