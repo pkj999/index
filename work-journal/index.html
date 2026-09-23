@@ -230,7 +230,7 @@ const Upload = mkIcon('upload');
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'ver.3 · 2026-09-23';
+const APP_VERSION = 'ver.1 · 2026-09-23';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -601,10 +601,27 @@ const wjOverlayStack = []; // [{ id, onClose }] — 가장 나중에 연 것이 
 let wjSuppressNextPop = 0; // 버튼으로 닫으면서 우리가 직접 history.back()을 부를 때, 그로 인한 popstate는 한 번 무시
 let wjOverlayIdSeq = 0;
 
+/* 오버레이가 하나도 없는 "홈" 상태(설정 폼 등 모달이 전부 닫힌 상태)에서 뒤로가기를 누르면
+   예전엔 바로 앱이 꺼졌음. 지금은 히스토리에 "가드" 한 칸을 미리 쌓아둬서 첫 뒤로가기는
+   그 칸을 소비하는 것으로 흡수하고 "한 번 더 누르면 종료돼요" 안내만 띄운 뒤 가드를 다시 쌓는다.
+   안내가 뜬 지 얼마 안 돼서(WJ_EXIT_WINDOW_MS 이내) 또 뒤로가기를 누르면 이번엔 가드를 다시 안 쌓아서
+   실제로 종료(또는 더 뒤로 이동)되게 둔다. */
+const WJ_EXIT_WINDOW_MS = 2000;
+let wjLastHomeBackAt = 0;
+window.history.pushState({ wjHomeGuard: true }, ''); // 앱 시작 시 가드를 한 번 쌓아둠
+
 window.addEventListener('popstate', () => {
   if (wjSuppressNextPop > 0) { wjSuppressNextPop--; return; }
   const top = wjOverlayStack.pop();
-  if (top) top.onClose();
+  if (top) { top.onClose(); return; }
+  // 여기 도달했다는 건 닫을 오버레이가 없다는 뜻 — 홈 화면에서 뒤로가기를 누른 것
+  const now = Date.now();
+  if (now - wjLastHomeBackAt < WJ_EXIT_WINDOW_MS) {
+    return; // 최근에 한 번 눌렀음 — 가드를 다시 안 쌓아서 이번엔 그대로 진행(종료)되게 둠
+  }
+  wjLastHomeBackAt = now;
+  window.history.pushState({ wjHomeGuard: true }, ''); // 종료 취소 — 가드를 다시 쌓아 이번 뒤로가기를 흡수
+  window.dispatchEvent(new CustomEvent('wj-exit-hint')); // App이 이 이벤트를 받아서 안내 토스트를 띄움
 });
 
 function useBackButtonClose(open, onClose) {
@@ -1505,6 +1522,8 @@ function QuickCaptureTab({ cfg, notes, phrases, editingNote, onEditNote, onAdd, 
   const [leavingNoteId, setLeavingNoteId] = useState(null);
 
   const handleDeleteAnimated = note => {
+    // 이미 업무일지로 옮겨간 기록은 실수로 지우면 아쉬우니 한 번 더 확인. 아직 정리 안 한 단발성 메모는 그냥 바로 삭제(빠르게 쓰고 치우는 용도라 확인창이 오히려 번거로움)
+    if (note.processed && !window.confirm('이 빠른 기록은 이미 업무일지로 작성됐어요. 그래도 휴지통으로 옮길까요?')) return;
     setLeavingNoteId(note.id);
     setTimeout(() => { onDelete(note); setLeavingNoteId(null); }, 220);
   };
@@ -2171,7 +2190,10 @@ function EntryFormModal({ open, initial, prefillNote, cfg, existingProjects, exi
       });
       setKeepImages(initial.images || []);
     } else if (prefillNote) {
-      setForm({ ...EMPTY_FORM, bullets: [prefillNote.text || ''], links: [] });
+      // 빠른 기록은 보통 줄바꿈으로 항목을 구분해서 쭉 적어두는 경우가 많아서, 한 줄에 다 뭉쳐 넣지 않고
+      // 줄바꿈 기준으로 나눠서 "주요 성과 및 한 일" 각 줄로 넣어줌 (빈 줄은 건너뜀)
+      const noteLines = (prefillNote.text || '').split('\n').map(s => s.trim()).filter(Boolean);
+      setForm({ ...EMPTY_FORM, bullets: noteLines.length > 0 ? noteLines : [''], links: [] });
       setKeepImages(prefillNote.imageRefs || []);
     } else {
       setForm({ ...EMPTY_FORM, bullets: [''], links: [] });
@@ -3051,6 +3073,13 @@ function App() {
   }, []);
 
   /* ---------- 3. 테마 적용 ---------- */
+  useEffect(() => {
+    // 홈 화면에서 뒤로가기를 눌렀을 때(오버레이 없는 상태) 전역 popstate 핸들러가 쏘는 신호를 받아 안내 토스트를 띄움
+    const onExitHint = () => showToast('뒤로가기를 한 번 더 누르면 종료돼요.');
+    window.addEventListener('wj-exit-hint', onExitHint);
+    return () => window.removeEventListener('wj-exit-hint', onExitHint);
+  }, [showToast]);
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.classList.toggle('light', theme !== 'dark');
