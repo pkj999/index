@@ -85,6 +85,7 @@ const { createRoot } = ReactDOM;
    아이콘 (lucide 경로 데이터를 인라인 SVG로 자체 내장)
 =========================================================== */
 const ICON_PATHS = {
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   search: '<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
@@ -143,6 +144,7 @@ function Icon({ name, size = 16, strokeWidth = 2, className = '', style }) {
   );
 }
 const mkIcon = n => p => <Icon name={n} {...p} />;
+const CopyIcon = mkIcon('copy');
 const Search = mkIcon('search');
 const Plus = mkIcon('plus');
 const Download = mkIcon('download');
@@ -193,7 +195,7 @@ const Upload = mkIcon('upload');
 =========================================================== */
 // 지금 보고 있는 화면이 최신 배포본인지 헷갈릴 때(캐시 문제 등) 설정 탭 맨 아래에서 확인하는 용도.
 // index.html/sw.js를 의미 있게 바꿀 때마다 이 값도 같이 올려주세요.
-const APP_VERSION = 'ver.1 · 2026-09-23';
+const APP_VERSION = 'ver.2 · 2026-09-23';
 const CONFIG_KEY = 'workjournal.ghconfig.v1';
 const THEME_KEY = 'workjournal.theme.v1';
 const PATH_ENTRIES = 'data/entries.json';
@@ -1935,6 +1937,37 @@ function HighlightText({ text, query }) {
   return parts;
 }
 
+// 사내망 경로처럼 클릭으로는 잘 안 열리는 값을 클립보드로 복사해주는 버튼 — 복사 성공하면 잠깐 "복사됨"으로 바뀜
+function CopyPathButton({ path }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async e => {
+    e.stopPropagation();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(path);
+      } else {
+        // 클립보드 API를 못 쓰는 환경(구형 브라우저 등)을 위한 대체 방법
+        const ta = document.createElement('textarea');
+        ta.value = path;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) { /* 복사 실패하면 그냥 아무 표시도 안 함 */ }
+  };
+  return (
+    <button type="button" onClick={handleCopy}
+      className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md active:scale-90 transition-all ${copied ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500 hover:text-[#45C4B0] hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+      {copied ? <Check size={12} strokeWidth={2.5} /> : <CopyIcon size={12} />} {copied ? '복사됨' : '복사'}
+    </button>
+  );
+}
+
 function EntryCard({ cfg, entry, query, onEdit, onDelete, onToggleFavorite, onViewSource, categoryMap }) {
   const [expanded, setExpanded] = useState(false);
   const [favBounce, setFavBounce] = useState(false);
@@ -2034,6 +2067,13 @@ function EntryCard({ cfg, entry, query, onEdit, onDelete, onToggleFavorite, onVi
           </div>
         )}
 
+        {entry.dataPath && (
+          <div className="mt-3 flex items-center gap-1.5 min-w-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-2.5 py-1.5">
+            <span className="flex-1 min-w-0 text-[11.5px] font-mono text-slate-500 dark:text-slate-400 truncate" title={entry.dataPath}>{entry.dataPath}</span>
+            <CopyPathButton path={entry.dataPath} />
+          </div>
+        )}
+
         {entry.tags && entry.tags.length > 0 && (
           <div className="mt-3 flex items-center flex-wrap gap-1.5">
             {entry.tags.map(t => (
@@ -2055,7 +2095,7 @@ function EntryCard({ cfg, entry, query, onEdit, onDelete, onToggleFavorite, onVi
   );
 }
 
-const EMPTY_FORM = { date: todayStr(), title: '', category: '개발', importance: '중', bullets: [''], problem: '', solution: '', lesson: '', tags: [], links: [] };
+const EMPTY_FORM = { date: todayStr(), title: '', category: '개발', importance: '중', bullets: [''], problem: '', solution: '', lesson: '', tags: [], links: [], dataPath: '' };
 
 function EntryFormModal({ open, initial, prefillNote, cfg, existingProjects, existingTags, categories, onClose, onSave }) {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -2077,6 +2117,7 @@ function EntryFormModal({ open, initial, prefillNote, cfg, existingProjects, exi
         problem: initial.problem || '', solution: initial.solution || '', lesson: initial.lesson || '',
         tags: initial.tags || [],
         links: initial.links && initial.links.length > 0 ? initial.links.map(l => ({ ...l })) : [],
+        dataPath: initial.dataPath || '',
       });
       setKeepImages(initial.images || []);
     } else if (prefillNote) {
@@ -2126,6 +2167,7 @@ function EntryFormModal({ open, initial, prefillNote, cfg, existingProjects, exi
         problem: form.problem.trim(), solution: form.solution.trim(), lesson: form.lesson.trim(),
         tags: form.tags,
         links: form.links.map(l => ({ label: (l.label || '').trim(), url: (l.url || '').trim() })).filter(l => l.url),
+        dataPath: form.dataPath.trim(),
         keepImages, newFiles,
       });
     } finally {
@@ -2230,6 +2272,13 @@ function EntryFormModal({ open, initial, prefillNote, cfg, existingProjects, exi
               ))}
             </div>
             <button type="button" onClick={addLink} className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-[#45C4B0] hover:underline active:scale-95 transition-transform"><Plus size={12} /> 링크 추가</button>
+          </div>
+
+          <div>
+            <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5"><CopyIcon size={12} /> 자료 경로 <span className="text-slate-400 font-normal">(사내망 등, 클릭 대신 복사해서 씀)</span></label>
+            <input type="text" value={form.dataPath} onChange={e => setForm(f => ({ ...f, dataPath: e.target.value }))} placeholder="예: \\나스서버\폴더\파일명.jpg"
+              className="w-full px-3 py-2 rounded-lg text-[13px] font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+            <p className="text-[10.5px] text-slate-400 dark:text-slate-600 mt-1 leading-relaxed">사내망 경로는 클릭해서 안 열리는 경우가 많아서, 카드에서 버튼으로 복사한 뒤 탐색기 주소창에 붙여넣는 방식이에요.</p>
           </div>
 
           <div>
